@@ -859,7 +859,15 @@
     function renderAll(){ renderToday(); renderHabits(); renderStats(); }
 
     // ===== Seguridad mínima
-    function escapeHtml(str){ return str.replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&gt;","">":"&quot;"}[s])); }
+    function escapeHtml(str){
+      return str.replace(/[&<>"']/g, s => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        "\"":"&quot;",
+        "'":"&#39;"
+      }[s]));
+    }
 
     // ===== iOS: altura real --vh y toast consciente del teclado
     (function iosVhFix(){
