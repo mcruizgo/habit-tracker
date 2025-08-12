@@ -350,4 +350,558 @@
     const pad = n => (n<10? '0'+n : ''+n);
     function todayStr(){ const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
     function dateOffsetStr(days){ const d = new Date(); d.setDate(d.getDate()+days); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-    function humanDate(){ return new Date().toLocaleDateString('es-ES',{weekday:'l
+    function humanDate(){ return new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+    function todayDow(){ return new Date().getDay(); }
+
+    // ===== IndexedDB + localStorage
+    const DB_NAME = 'habitDBv5';
+    const STORE = 'kv';
+    let state = null;
+
+    function openDB(){ return new Promise((resolve, reject)=>{ const req = indexedDB.open(DB_NAME, 1); req.onupgradeneeded = (e)=>{ const db=e.target.result; if(!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE,{keyPath:'key'}); }; req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); }); }
+    async function idbGet(key){ const db = await openDB(); return new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,'readonly'); const st=tx.objectStore(STORE); const rq=st.get(key); rq.onsuccess=()=>resolve(rq.result?rq.result.value:undefined); rq.onerror=()=>reject(rq.error); }); }
+    async function idbSet(key,value){ const db = await openDB(); return new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE); st.put({key,value}); tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error); }); }
+
+    function defaultState(){ return {lang:'es', habits:[], completions:{}, createdAt: todayStr(), lastOpen: todayStr(), reviews:[], order:[], archived:[], notifications:{enabled:true,lastPing:0}, security:{autoLockMins:10} }; }
+    function migrate(old){ const s = JSON.parse(JSON.stringify(old||defaultState())); s.lang = s.lang||'es'; s.habits = Array.isArray(s.habits)? s.habits : []; s.completions = s.completions && typeof s.completions==='object'? s.completions : {}; s.reviews = Array.isArray(s.reviews)? s.reviews : []; s.order = Array.isArray(s.order)? s.order : s.habits.map(h=>h.id); s.archived = Array.isArray(s.archived)? s.archived : []; s.notifications = s.notifications||{enabled:true,lastPing:0}; s.security = s.security||{autoLockMins:10}; for(const h of s.habits){ if(!('tag' in h)) h.tag='Any'; if(!Array.isArray(h.days)) h.days=[]; if(typeof h.goal !== 'number' || h.goal < 1) h.goal = 1; if(typeof h.archived!=='boolean') h.archived=false; } for(const id in s.completions){ const obj=s.completions[id]||{dates:{}}; if(!obj.dates) obj.dates={}; for(const d in obj.dates){ if(obj.dates[d]===true) obj.dates[d]=1; if(obj.dates[d]===false) delete obj.dates[d]; } } return s; }
+
+    async function loadState(){ try{ const fromIDB = await idbGet('state'); if(fromIDB) return migrate(fromIDB); const raw = localStorage.getItem('habitDataV1'); if(raw) return migrate(JSON.parse(raw)); return defaultState(); }catch(e){ const raw=localStorage.getItem('habitDataV1'); return raw?migrate(JSON.parse(raw)):defaultState(); } }
+    async function saveState(){ try{ state.lastOpen=todayStr(); await idbSet('state', state); }catch{} try{ localStorage.setItem('habitDataV1', JSON.stringify(state)); }catch{} broadcastState(); }
+
+    // ===== Multitab
+    const channel = ('BroadcastChannel' in self) ? new BroadcastChannel('hr-sync') : null;
+    function broadcastState(){ if(channel) channel.postMessage({type:'state', state}); }
+    if(channel){ channel.onmessage = (e)=>{ if(e.data && e.data.type==='state'){ state = migrate(e.data.state); renderAll(); } }; }
+
+    // ===== Persistencia (reduce purgados)
+    async function requestPersistence(){
+      if(!('storage' in navigator) || !navigator.storage.persist) return;
+      try{
+        const persisted = await navigator.storage.persisted();
+        if(!persisted){
+          const ok = await navigator.storage.persist();
+          if(!ok){ document.getElementById('persist-note').hidden=false; }
+        }
+      }catch{}
+    }
+
+    // ===== Hábitos CRUD
+    function addHabit(name, tag, goal=1){ if(!name) return; const id='h'+Math.random().toString(36).slice(2,9); const h={id,name,tag,days:[],goal:Math.max(1,parseInt(goal)||1),archived:false}; state.habits.push(h); state.order.push(id); state.completions[id]={dates:{}}; saveState(); renderAll(); }
+    function quickAdd(name, tag){ addHabit(name, tag, 1); showTab('habits'); }
+    function addHabitFromUI(){ const name=document.getElementById('new-name').value.trim(); const tag=document.getElementById('new-tag').value; const goal=parseInt(document.getElementById('new-goal').value)||1; addHabit(name,tag,goal); document.getElementById('new-name').value=''; document.getElementById('new-goal').value='1'; }
+    function deleteHabit(id){ if(!confirm('¿Eliminar este hábito? Se perderá su historial.')) return; state.habits=state.habits.filter(h=>h.id!==id); state.order=state.order.filter(x=>x!==id); delete state.completions[id]; saveState(); renderAll(); }
+    function renameHabit(id, newName){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.name=newName; saveState(); renderAll(); }
+    function changeTag(id, newTag){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.tag=newTag; saveState(); renderAll(); }
+    function toggleDay(id, dow){ const h=state.habits.find(h=>h.id===id); if(!h) return; const idx=(h.days||[]).indexOf(dow); if(idx>=0) h.days.splice(idx,1); else h.days.push(dow); h.days.sort(); saveState(); renderAll(); }
+    function setGoal(id, goal){ const h=state.habits.find(h=>h.id===id); if(!h) return; const g=Math.max(1, parseInt(goal)||1); h.goal=g; saveState(); renderAll(); }
+    function archiveHabit(id, arch){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.archived=arch; saveState(); renderAll(); }
+
+    // ===== Drag & drop + fallback ↑↓
+    let dragId=null;
+    function onDragStart(e,id){ dragId=id; e.dataTransfer.effectAllowed='move'; }
+    function onDragOver(e,id){ e.preventDefault(); const a=state.order.indexOf(dragId), b=state.order.indexOf(id); if(a===-1||b===-1||a===b) return; state.order.splice(b,0,state.order.splice(a,1)[0]); renderHabits(); }
+    function onDragEnd(){ saveState(); dragId=null; }
+    function moveUp(id){ const i = state.order.indexOf(id); if(i>0){ state.order.splice(i-1,0,state.order.splice(i,1)[0]); saveState(); renderHabits(); } }
+    function moveDown(id){ const i = state.order.indexOf(id); if(i>=0 && i<state.order.length-1){ state.order.splice(i+1,0,state.order.splice(i,1)[0]); saveState(); renderHabits(); } }
+
+    // ===== Contadores y UNDO
+    let toastTimer=null, toastUndo=null;
+    function showToast(msg, undoFn){ const t=document.getElementById('toast'); document.getElementById('toast-msg').textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastUndo = undoFn || null; toastTimer = setTimeout(()=>{ t.classList.remove('show'); toastUndo=null; }, 5000); }
+    function undoAction(){ if(toastUndo){ toastUndo(); } document.getElementById('toast').classList.remove('show'); toastUndo=null; }
+
+    function getCount(id, date=todayStr()){ const comp=state.completions[id]||{dates:{}}; return parseInt(comp.dates[date]||0); }
+    function setCount(id, count, date=todayStr()){ if(!state.completions[id]) state.completions[id]={dates:{}}; const prev = getCount(id,date); if(count<=0) delete state.completions[id].dates[date]; else state.completions[id].dates[date]=count; saveState(); renderAll(); showToast('Guardado', ()=>{ setCount(id, prev, date); }); }
+    function inc(id){ const h=state.habits.find(h=>h.id===id); if(!h) return; setCount(id, Math.min(getCount(id)+1, h.goal)); }
+    function dec(id){ setCount(id, Math.max(getCount(id)-1, 0)); }
+    function toggleDone(id){ const h=state.habits.find(h=>h.id===id); if(!h) return; const done = getCount(id)>=h.goal; setCount(id, done?0:h.goal); }
+
+    // ===== Rachas / adherencia / mes
+    function isDoneOn(id, date){ const h=state.habits.find(h=>h.id===id); if(!h) return false; const cnt=parseInt((state.completions[id]||{dates:{}}).dates[date]||0); return cnt >= h.goal; }
+    function computeStreak(id){ let streak=0; for(let i=0;i<3650;i++){ const ds=dateOffsetStr(-i); if(isDoneOn(id, ds)) streak++; else break; } return streak; }
+    function last7(id){ const arr=[]; for(let i=6;i>=0;i--){ const ds=dateOffsetStr(-i); arr.push(isDoneOn(id, ds)); } return arr; }
+    function adherence(id, days=30){ let ok=0, total=0; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const h=state.habits.find(h=>h.id===id); if(!h || h.archived) continue; const dow = new Date(Date.parse(ds)).getDay(); if(h.days.length && !h.days.includes(dow)) continue; total++; if(isDoneOn(h.id, ds)) ok++; } return total? Math.round(ok*100/total):0; }
+    function adherenceByPart(days=30){ let amT=0, amOk=0, pmT=0, pmOk=0; for(const h of state.habits){ if(h.archived) continue; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const dow = new Date(Date.parse(ds)).getDay(); if(h.days.length && !h.days.includes(dow)) continue; if(h.tag==='PM'){ pmT++; if(isDoneOn(h.id, ds)) pmOk++; } else if(h.tag==='AM'){ amT++; if(isDoneOn(h.id, ds)) amOk++; } else { amT++; pmT++; if(isDoneOn(h.id, ds)){ amOk++; pmOk++; } } } } return {am: amT?Math.round(amOk*100/amT):0, pm: pmT?Math.round(pmOk*100/pmT):0}; }
+
+    // ===== Render
+    function showTab(name){
+      for(const p of ['today','habits','stats','review','backup']){
+        const panel=document.getElementById('panel-'+p);
+        const btn=document.getElementById('tab-'+p);
+        const selected=(p===name);
+        if(panel) panel.hidden=!selected;
+        if(btn) btn.setAttribute('aria-selected', selected);
+      }
+      if(name==='backup') doExport();
+      if(name==='stats') renderMonthHeat();
+      if(name==='review') renderReview();
+    }
+    function currentDaypart(){ const h=new Date().getHours(); return (h < 14) ? 'AM' : 'PM'; }
+    let filterDaypart=currentDaypart();
+    function toggleDaypartFilter(){ filterDaypart=(filterDaypart==='AM'?'PM':'AM'); renderToday(); }
+    function renderGreeting(){
+      const hour=new Date().getHours();
+      const g=document.getElementById('greeting');
+      const dateEl=document.getElementById('today-date');
+      dateEl.textContent=humanDate();
+      g.textContent = (hour<12?'Buenos días':(hour<20?'Buenas tardes':'Buenas noches'));
+      const chip=document.getElementById('daypart');
+      chip.textContent=filterDaypart;
+      chip.className='chip tag-'+filterDaypart;
+    }
+    function isActiveToday(h){ if(h.archived) return false; if(!h.days || h.days.length===0) return true; return h.days.includes(todayDow()); }
+
+    function renderToday(){
+      renderGreeting(); const wrap=document.getElementById('today-list'); wrap.innerHTML='';
+      const list=state.order.map(id=>state.habits.find(h=>h.id===id)).filter(Boolean).filter(h=>isActiveToday(h) && (filterDaypart==='AM' ? (h.tag==='AM'||h.tag==='Any') : (h.tag==='PM'||h.tag==='Any')));
+      if(list.length===0){ wrap.innerHTML = `<div class="muted">No hay hábitos para este tramo. Ajusta días/objetivos en <strong>Hábitos</strong>.</div>`; return; }
+      for(const h of list){
+        const done=isDoneOn(h.id,todayStr()); const count=getCount(h.id); const need=h.goal||1; const li=document.createElement('div'); li.className='item';
+        const controls = (need>1)
+          ? `<div class="row"><button class="btn secondary" onclick="dec('${h.id}')">−</button><div>${count}/${need}</div><button class="btn" onclick="inc('${h.id}')">+</button></div>`
+          : `<input type="checkbox" ${done?'checked':''} onclick="toggleDone('${h.id}')" />`;
+        li.innerHTML = `
+          <div class="row" style="gap:12px; align-items:center">
+            ${controls}
+            <div>
+              <div><strong>${escapeHtml(h.name)}</strong> 
+                <span class="chip tag-${h.tag}">${h.tag}</span> 
+                <span class="pill">Objetivo: ${need}</span>
+              </div>
+              <div class="streak">Racha: <strong>${computeStreak(h.id)}</strong> día(s)</div>
+            </div>
+            <div class="spacer"></div>
+            <div class="heat" aria-label="Últimos 7 días">
+              ${last7(h.id).map(v=>`<div class="sq ${v?'on':''}"></div>`).join('')}
+            </div>
+          </div>`;
+        wrap.appendChild(li);
+      }
+    }
+
+    function habitRow(h){
+      const DOW=['D','L','M','X','J','V','S']; const archClass = h.archived?'archived':'';
+      return `
+      <div class="item ${archClass}" draggable="true"
+           ondragstart="onDragStart(event,'${h.id}')"
+           ondragover="onDragOver(event,'${h.id}')"
+           ondragend="onDragEnd()">
+        <div class="drag" title="Drag">⠿</div>
+        <div class="reorder">
+          <button class="btn secondary" onclick="moveUp('${h.id}')">↑</button>
+          <button class="btn secondary" onclick="moveDown('${h.id}')">↓</button>
+        </div>
+
+        <input type="text" value="${escapeHtml(h.name)}"
+               onblur="renameHabit('${h.id}', this.value.trim())" />
+
+        <select onchange="changeTag('${h.id}', this.value)">
+          <option ${h.tag==='AM'?'selected':''}>AM</option>
+          <option ${h.tag==='PM'?'selected':''}>PM</option>
+          <option value="Any" ${h.tag==='Any'?'selected':''}>Cualquiera</option>
+        </select>
+
+        <input type="number" min="1" step="1" value="${h.goal||1}"
+               style="max-width:100px" title="Objetivo diario"
+               onblur="setGoal('${h.id}', this.value)" />
+
+        <div class="spacer"></div>
+
+        <div class="dow">
+          ${DOW.map((lab,idx)=>`<button type="button" aria-pressed="${(h.days||[]).includes(idx)}"
+             onclick="toggleDay('${h.id}',${idx})">${lab}</button>`).join('')}
+        </div>
+
+        <div class="spacer"></div>
+
+        <div class="actions">
+          <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">
+            ${h.archived?'Desarchivar':'Archivar'}
+          </button>
+          <button class="btn danger" onclick="deleteHabit('${h.id}')">Eliminar</button>
+        </div>
+      </div>`;
+    }
+    function renderHabits(){
+      const wrap=document.getElementById('habit-list'); wrap.innerHTML='';
+      if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">Aún no tienes hábitos. Usa Sugerencias o añade el tuyo.</div>`; return; }
+      for(const id of state.order){ const h = state.habits.find(h=>h.id===id); if(!h) continue; wrap.insertAdjacentHTML('beforeend', habitRow(h)); }
+    }
+
+    function renderStats(){
+      const wrap=document.getElementById('stats-wrap'); wrap.innerHTML='';
+      if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">Nada que mostrar todavía.</div>`; return; }
+      const byPart = adherenceByPart(30);
+      for(const h of state.habits){
+        if(h.archived) continue;
+        const row=document.createElement('div'); row.className='item';
+        const streak=computeStreak(h.id); const adh=adherence(h.id,30);
+        row.innerHTML = `
+          <div>
+            <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">Obj ${h.goal||1}/día</span></div>
+            <div class="small muted">Adherencia 30 días: <strong>${adh}%</strong> • Racha: <strong>${streak}</strong></div>
+          </div>
+          <div class="spacer"></div>
+          <div class="heat">${last7(h.id).map(v=>`<div class="sq ${v?'on':''}"></div>`).join('')}</div>`;
+        wrap.appendChild(row);
+      }
+      const summary = document.createElement('div'); summary.className='small muted'; summary.style.marginTop='6px';
+      summary.textContent = `Adherencia AM: ${byPart.am}% • Adherencia PM: ${byPart.pm}%`;
+      wrap.appendChild(summary);
+    }
+
+    function renderMonthHeat(){
+      const cont = document.getElementById('month-heat'); cont.innerHTML='';
+      const now = new Date(); const y=now.getFullYear(), m=now.getMonth();
+      const first = new Date(y,m,1); const last = new Date(y,m+1,0);
+      const startDow = first.getDay(); const days = last.getDate(); const cells=[];
+      for(let i=0;i<startDow;i++) cells.push(null);
+      for(let d=1; d<=days; d++){
+        const date=`${y}-${pad(m+1)}-${pad(d)}`;
+        let active=0, done=0;
+        for(const h of state.habits){
+          if(h.archived) continue;
+          const dow = new Date(y,m,d).getDay();
+          if(h.days.length && !h.days.includes(dow)) continue;
+          active++; if(isDoneOn(h.id, date)) done++;
+        }
+        const ratio = active? (done/active) : 0;
+        let cls='cell';
+        if(ratio>0 && ratio<=0.33) cls+=' lvl1'; else if(ratio<=0.66) cls+=' lvl2'; else if(ratio>0.66) cls+=' lvl3';
+        cells.push({cls, date});
+      }
+      for(const c of cells){
+        const div=document.createElement('div');
+        if(!c){ div.className='cell'; cont.appendChild(div); continue; }
+        div.className=c.cls; div.title=c.date; cont.appendChild(div);
+      }
+    }
+
+    function mondayOfWeek(d){ const dt = new Date(d); const day = dt.getDay(); const diff = (day+6)%7; dt.setDate(dt.getDate()-diff); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+    function renderReview(){
+      const label=document.getElementById('week-label'); const monday=mondayOfWeek(new Date()); label.textContent = 'Semana que empieza: '+ monday;
+      const list=document.getElementById('rev-list'); list.innerHTML='';
+      const items = state.reviews.slice().reverse();
+      if(items.length===0){ list.innerHTML = `<div class="muted small">Sin revisiones aún.</div>`; return; }
+      for(const r of items){
+        const div=document.createElement('div'); div.className='item';
+        div.innerHTML = `<div><div><strong>${r.week}</strong></div><div class="small">✅ ${escapeHtml(r.good||'')}<br/>🔧 ${escapeHtml(r.adjust||'')}<br/>🏆 ${escapeHtml(r.win||'')}</div></div>`;
+        list.appendChild(div);
+      }
+    }
+    function clearReviewForm(){ document.getElementById('rev-good').value=''; document.getElementById('rev-adj').value=''; document.getElementById('rev-win').value=''; }
+    function saveReview(){
+      const week=mondayOfWeek(new Date());
+      const good=document.getElementById('rev-good').value.trim();
+      const adjust=document.getElementById('rev-adj').value.trim();
+      const win=document.getElementById('rev-win').value.trim();
+      const idx = state.reviews.findIndex(r=>r.week===week);
+      const entry={week, good, adjust, win};
+      if(idx>=0) state.reviews[idx]=entry; else state.reviews.push(entry);
+      saveState(); clearReviewForm(); renderReview(); showToast('Revisión guardada');
+    }
+
+    // ===== Backup / Restore / Crypto
+    function doExport(){ const box=document.getElementById('export-box'); box.value=JSON.stringify(state,null,2); }
+    function copyExport(){ const box=document.getElementById('export-box'); box.select(); document.execCommand('copy'); }
+    function downloadExport(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='habit-backup.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }
+    async function shareExport(){ if(navigator.share){ const file = new File([JSON.stringify(state,null,2)], 'habit-backup.json', {type:'application/json'}); try{ await navigator.share({ files:[file], title:'Habit Backup', text:'Backup JSON' }); }catch(e){} } else { alert('Tu navegador no soporta compartir.'); } }
+
+    function validateImported(obj){ if(!obj || typeof obj!=='object') throw new Error('No es un objeto'); if(!Array.isArray(obj.habits)) throw new Error('Falta array de hábitos'); if(typeof obj.completions!=='object') throw new Error('Falta historial'); return migrate(obj); }
+    function mergeStates(base, incoming){
+      const result = migrate(base); const inc = migrate(incoming);
+      const nameMap = new Map(result.habits.map(h=>[h.name.toLowerCase(), h.id]));
+      for(const h of inc.habits){
+        const key=h.name.toLowerCase();
+        if(nameMap.has(key)){
+          const id=nameMap.get(key);
+          const target = result.habits.find(x=>x.id===id);
+          target.goal = Math.max(target.goal||1, h.goal||1);
+          target.days = Array.from(new Set([...(target.days||[]), ...(h.days||[])])).sort();
+          const tc = result.completions[id] = result.completions[id]||{dates:{}};
+          const sc = inc.completions[h.id]||{dates:{}};
+          for(const d in sc.dates){ tc.dates[d] = Math.max(parseInt(tc.dates[d]||0), parseInt(sc.dates[d]||0)); }
+        } else {
+          const newId = 'h'+Math.random().toString(36).slice(2,9);
+          result.habits.push({id:newId, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:h.archived||false});
+          result.order.push(newId);
+          const sc = inc.completions[h.id]||{dates:{}};
+          result.completions[newId] = {dates:{...sc.dates}};
+        }
+      }
+      const weeks = new Set(result.reviews.map(r=>r.week));
+      for(const r of inc.reviews){ if(!weeks.has(r.week)) result.reviews.push(r); }
+      return result;
+    }
+
+    function importFromFile(){
+      const f=document.getElementById('import-file').files[0]; if(!f) return alert('Elige un archivo');
+      const r=new FileReader();
+      r.onload=()=>{
+        const merge=document.getElementById('merge-toggle').checked;
+        try{
+          let obj;
+          if(f.name.endsWith('.hrz')){ alert('Usa "Importar .hrz" con tu contraseña.'); return; }
+          else { obj=validateImported(JSON.parse(r.result)); }
+          state = merge? mergeStates(state, obj) : obj;
+          saveState(); renderAll(); alert('Datos importados.');
+        }catch(e){ alert('No se pudo importar: '+e.message); }
+      };
+      r.readAsText(f);
+    }
+    function doImport(){
+      const raw=document.getElementById('import-box').value.trim(); if(!raw) return alert('Pega el JSON a importar.');
+      const merge=document.getElementById('merge-toggle').checked;
+      if(!merge && !confirm('Esto reemplazará todos tus datos. ¿Continuar?')) return;
+      try{
+        const obj=validateImported(JSON.parse(raw));
+        state = merge? mergeStates(state,obj) : obj;
+        saveState(); renderAll(); alert('Datos restaurados.');
+      }catch(e){ alert('No se pudo importar: '+e.message); }
+    }
+
+    const textEnc = new TextEncoder(); const textDec = new TextDecoder();
+    async function deriveKey(pass, salt){
+      const baseKey = await crypto.subtle.importKey('raw', textEnc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'}, baseKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+    }
+    function b64a(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+    function a64b(str){ const bin = atob(str); const arr = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr.buffer; }
+    async function encryptState(pass){
+      if(!pass) throw new Error('Falta contraseña');
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const key=await deriveKey(pass, salt);
+      const data=textEnc.encode(JSON.stringify(state));
+      const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, data);
+      return JSON.stringify({alg:'AES-GCM', salt:b64a(salt), iv:b64a(iv), ct:b64a(ct)});
+    }
+    async function decryptState(pass, payload){
+      const obj = typeof payload==='string'? JSON.parse(payload) : payload;
+      const salt=a64b(obj.salt); const iv=a64b(obj.iv);
+      const key=await deriveKey(pass, new Uint8Array(salt));
+      const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(iv)}, key, a64b(obj.ct));
+      return JSON.parse(textDec.decode(pt));
+    }
+    async function downloadEncrypted(){
+      const pass=document.getElementById('enc-pass').value;
+      try{
+        const enc=await encryptState(pass);
+        const blob=new Blob([enc],{type:'application/octet-stream'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='habit-backup.hrz'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+      }catch(e){ alert('Error: '+e.message); }
+    }
+    async function shareEncrypted(){
+      if(!navigator.share) return alert('Compartir no soportado');
+      const pass=document.getElementById('enc-pass').value;
+      try{
+        const enc=await encryptState(pass);
+        const file = new File([enc], 'habit-backup.hrz', {type:'application/octet-stream'});
+        await navigator.share({ files:[file], title:'Habit Encrypted Backup', text:'Encrypted .hrz' });
+      }catch(e){ if(e.name!=='AbortError') alert('Error: '+e.message); }
+    }
+    async function importEncrypted(){
+      const pass=prompt('Contraseña para desencriptar:'); if(!pass) return;
+      const f=document.getElementById('import-file').files[0];
+      if(!f || !f.name.endsWith('.hrz')) return alert('Elige un archivo .hrz');
+      const r=new FileReader();
+      r.onload=async()=>{
+        try{
+          const obj=JSON.parse(r.result); const dec=await decryptState(pass,obj);
+          const merge=document.getElementById('merge-toggle').checked;
+          state = merge? mergeStates(state,dec) : migrate(dec);
+          saveState(); renderAll(); alert('Datos importados.');
+        }catch(e){ alert('No se pudo descifrar: '+e.message); }
+      };
+      r.readAsText(f);
+    }
+
+    // ===== PIN & Lock
+    async function pinBits(pin, salt){
+      const base = await crypto.subtle.importKey('raw', textEnc.encode(pin), 'PBKDF2', false, ['deriveBits']);
+      return crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations:150000, hash:'SHA-256'}, base, 256);
+    }
+    function setAutoLock(mins){ mins=parseInt(mins)||0; state.security = state.security||{}; state.security.autoLockMins = mins; saveState(); }
+    async function enablePin(){
+      const p1=document.getElementById('pin-1').value.trim();
+      const p2=document.getElementById('pin-2').value.trim();
+      const hint=document.getElementById('pin-hint').value.trim();
+      if(!/^\d{4,8}$/.test(p1)) return alert('El PIN debe tener 4–8 dígitos.');
+      if(p1!==p2) return alert('Los PIN no coinciden.');
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const bits=await pinBits(p1, salt);
+      state.security = state.security||{};
+      state.security.pin = { salt: b64a(salt), hash: b64a(bits), hint };
+      saveState(); alert('PIN activado/actualizado.');
+    }
+    function disablePin(){
+      if(!state.security || !state.security.pin) return alert('No hay PIN activo.');
+      if(!confirm('Quitar PIN de apertura?')) return;
+      delete state.security.pin; saveState(); alert('PIN desactivado.'); hideLock();
+    }
+    async function verifyPin(pin){
+      try{
+        const sec=state.security && state.security.pin; if(!sec) return true;
+        const salt = new Uint8Array(a64b(sec.salt)); const expected = b64a(await pinBits(pin, salt));
+        return expected === sec.hash;
+      }catch{ return false; }
+    }
+    function showHint(){ const sec=state.security && state.security.pin; const el=document.getElementById('lock-msg'); el.textContent = (sec && sec.hint) ? ('Pista: '+sec.hint) : 'No hay pista guardada.'; }
+    function showLock(msg){
+      const o=document.getElementById('lock');
+      document.getElementById('lock-pin').value='';
+      document.getElementById('lock-msg').textContent=msg||'';
+      o.style.display='flex';
+      setTimeout(()=>{ const inp=document.getElementById('lock-pin'); inp.focus({preventScroll:false}); if('scrollIntoView' in inp) inp.scrollIntoView({block:'center'}); },100);
+    }
+    function hideLock(){ const o=document.getElementById('lock'); o.style.display='none'; }
+    async function tryUnlock(){
+      const pin=document.getElementById('lock-pin').value.trim();
+      if(!/^\d{4,8}$/.test(pin)) { document.getElementById('lock-msg').textContent='PIN inválido'; return; }
+      const ok = await verifyPin(pin);
+      if(ok){ hideLock(); lastUnlockTs = Date.now(); }
+      else { document.getElementById('lock-msg').textContent='PIN incorrecto'; }
+    }
+    function confirmNuke(){ if(!confirm('Esto borrará todos los datos locales (hábitos e historial). ¿Continuar?')) return; nukeAllData(); }
+    async function nukeAllData(){
+      try{
+        indexedDB.deleteDatabase(DB_NAME);
+        localStorage.removeItem('habitDataV1');
+        if('caches' in window){
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(k=>k.startsWith('hr-cache-')).map(k=>caches.delete(k)));
+        }
+        location.reload();
+      }catch(e){ alert('No se pudo borrar: '+e.message); }
+    }
+
+    // Autolock al volver tras X minutos
+    let hiddenAt = 0, lastUnlockTs = 0;
+    document.addEventListener('visibilitychange', ()=>{
+      const mins = (state && state.security && state.security.autoLockMins) || 0;
+      if(document.hidden){ hiddenAt = Date.now(); }
+      else if(hiddenAt && mins>0){
+        const away = (Date.now()-hiddenAt)/60000;
+        if(away >= mins && state.security && state.security.pin){ showLock(); }
+        hiddenAt=0;
+      }
+    });
+
+    // Ajuste del overlay con teclado iOS
+    if(window.visualViewport){
+      const adjustLock = () => {
+        const o = document.getElementById('lock');
+        if(!o || o.style.display!=='flex') return;
+        const kb = Math.max(0, window.innerHeight - window.visualViewport.height);
+        o.style.paddingBottom = `calc(env(safe-area-inset-bottom) + ${kb}px)`;
+      };
+      visualViewport.addEventListener('resize', adjustLock);
+      visualViewport.addEventListener('scroll', adjustLock);
+    }
+
+    // ===== Init =====
+    (async function init(){
+      await requestPersistence();
+      state = await loadState();
+
+      // Primer arranque: sugerencias por defecto
+      if(!state.habits || state.habits.length===0){
+        state = state || defaultState();
+        const defaults = [
+          {name:'🥤 Agua al despertar', tag:'AM', goal:1, days:[]},
+          {name:'🍵 Té verde', tag:'AM', goal:1, days:[]},
+          {name:'🍳 Desayuno proteico', tag:'AM', goal:1, days:[]},
+          {name:'🥗 5 raciones fruta/verdura', tag:'Any', goal:5, days:[]},
+          {name:'🥜 Frutos secos (puñado)', tag:'Any', goal:1, days:[1,2,3,4,5]},
+          {name:'🕘 Cierre de cocina (≥3 h antes)', tag:'PM', goal:1, days:[]},
+          {name:'🌿 Infusión de hinojo', tag:'PM', goal:1, days:[]},
+          {name:'🚫 Sin alcohol (L–J)', tag:'PM', goal:1, days:[1,2,3,4]},
+
+          {name:'🚶‍♀️ Caminata 45′', tag:'AM', goal:1, days:[]},
+          {name:'🚶‍♀️ Caminata 30′', tag:'PM', goal:1, days:[]},
+          {name:'💪 Fuerza 20′', tag:'Any', goal:1, days:[1,3,5]},
+          {name:'🧘‍♀️ Movilidad 5′', tag:'AM', goal:1, days:[]},
+          {name:'🏋️‍♀️ Core 8′', tag:'Any', goal:1, days:[2,4,6]},
+          {name:'🎾 Pádel (semanal)', tag:'Any', goal:1, days:[6]},
+
+          {name:'🇬🇧 English 15', tag:'Any', goal:1, days:[]},
+          {name:'📚 Lectura técnica 15′', tag:'Any', goal:1, days:[1,2,3,4]},
+          {name:'🧩 Curso AEM/skills 20′', tag:'Any', goal:1, days:[2,4]},
+          {name:'⏱️ Pomodoro 25′ (focus)', tag:'Any', goal:1, days:[1,2,3,4,5]},
+          {name:'📝 Diario de aprendizaje (3 bullets)', tag:'PM', goal:1, days:[]},
+
+          {name:'🍽️ Reset cocina 5′', tag:'PM', goal:1, days:[]},
+          {name:'🛋️ Salón recogido 5′', tag:'PM', goal:1, days:[]},
+          {name:'🧴 Baño exprés 10′', tag:'Any', goal:1, days:[3,6]},
+          {name:'🧺 Lavadora (semanal)', tag:'Any', goal:1, days:[3]},
+          {name:'🧻 Toallas (semanal)', tag:'Any', goal:1, days:[6]},
+          {name:'🛏️ Sábanas (quincenal)', tag:'Any', goal:1, days:[0]},
+          {name:'🗑️ Basura/reciclaje', tag:'PM', goal:1, days:[1,3,5]},
+          {name:'🔚 Shutdown checklist', tag:'PM', goal:1, days:[]}
+        ];
+        for(const h of defaults){
+          const id='h'+Math.random().toString(36).slice(2,9);
+          state.habits.push({id, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:false});
+          state.order.push(id);
+          state.completions[id]={dates:{}};
+        }
+        await saveState();
+      }
+
+      renderAll();
+
+      // Marcar dispositivo táctil para fallback de reordenación
+      document.body.classList.toggle('touch', matchMedia('(pointer: coarse)').matches);
+
+      // Bloquear al abrir si hay PIN
+      if(state.security && state.security.pin){ showLock(); }
+    })();
+
+    function renderAll(){ renderToday(); renderHabits(); renderStats(); }
+
+    // ===== Seguridad mínima
+    function escapeHtml(str){
+      return String(str).replace(/[&<>"']/g, s => ({
+        "&":"&amp;",
+        "<":"&lt;",
+        ">":"&gt;",
+        "\"":"&quot;",
+        "'":"&#39;"
+      }[s]));
+    }
+
+    // ===== iOS: altura real --vh y toast consciente del teclado
+    (function iosVhFix(){
+      const setVh = () => {
+        const h = (window.visualViewport ? visualViewport.height : window.innerHeight);
+        document.documentElement.style.setProperty('--vh', (h/100) + 'px');
+      };
+      setVh();
+      window.addEventListener('resize', setVh);
+      if (window.visualViewport) {
+        visualViewport.addEventListener('resize', setVh);
+        visualViewport.addEventListener('scroll', setVh);
+      }
+    })();
+
+    (function toastKeyboardAware(){
+      const t = document.getElementById('toast');
+      if (!t || !window.visualViewport) return;
+      const adjust = () => {
+        const kb = Math.max(0, window.innerHeight - visualViewport.height);
+        t.style.bottom = `calc(${kb}px + env(safe-area-inset-bottom) + 20px)`;
+      };
+      visualViewport.addEventListener('resize', adjust);
+      visualViewport.addEventListener('scroll', adjust);
+    })();
+
+    // ===== Service Worker (sw.js)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', {scope:'./'})
+          .then(r => console.log('SW registrado:', r.scope))
+          .catch(err => console.warn('SW error', err));
+      });
+    }
+  </script>
+</body>
+</html>
