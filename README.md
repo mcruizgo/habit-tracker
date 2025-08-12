@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://TU_USUARIO.github.io/TU_REPO/"><b>➡️ Abrir la app</b></a>
+  <a href="https://mcruizgo.github.io/habit-tracker/"><b>➡️ Abrir la app</b></a>
 </p>
 
 ---
