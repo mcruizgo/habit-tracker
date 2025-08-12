@@ -45,6 +45,7 @@
     @supports (height: 100dvh) { body { min-height: 100dvh; } }
 
     *{-webkit-tap-highlight-color:transparent}
+    *, *::before, *::after{ box-sizing: border-box; }
 
     .container{max-width:1024px;margin:0 auto;padding:24px; padding-left:calc(24px + env(safe-area-inset-left)); padding-right:calc(24px + env(safe-area-inset-right))}
     header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
@@ -107,6 +108,19 @@
     #lock .panel{width:min(420px,92vw);background:#0b1225;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:18px}
     #lock h3{margin:0 0 6px 0}
     #lock .hint{color:var(--muted);font-size:12px}
+
+    /* --- Fix layout Hábitos (iPhone/estrecho) --- */
+    .item{ flex-wrap: wrap; align-items: flex-start; }
+    .item > input[type="text"]{ flex: 1 1 220px; min-width: 160px; }
+    .item > select{ flex: 0 0 92px; }
+    .item > input[type="number"]{ flex: 0 0 90px; }
+    .dow{ flex: 1 1 240px; }           /* que pueda bajar de línea */
+    .btn{ flex-shrink: 0; }            /* que no se aplasten los botones */
+    .actions{ display:flex; gap:8px; margin-left:auto; flex: 0 0 auto; }
+    @media (max-width: 430px){
+      .actions{ flex-basis: 100%; justify-content: flex-end; margin-top: 8px; }
+      .dow{ order: 5; }                /* deja los días antes de las acciones en móvil */
+    }
   </style>
 </head>
 <body>
@@ -467,24 +481,44 @@
     function habitRow(h){
       const DOW=['D','L','M','X','J','V','S']; const archClass = h.archived?'archived':'';
       return `
-      <div class="item ${archClass}" draggable="true" ondragstart="onDragStart(event,'${h.id}')" ondragover="onDragOver(event,'${h.id}')" ondragend="onDragEnd()">
+      <div class="item ${archClass}" draggable="true"
+           ondragstart="onDragStart(event,'${h.id}')"
+           ondragover="onDragOver(event,'${h.id}')"
+           ondragend="onDragEnd()">
         <div class="drag" title="Drag">⠿</div>
         <div class="reorder">
           <button class="btn secondary" onclick="moveUp('${h.id}')">↑</button>
           <button class="btn secondary" onclick="moveDown('${h.id}')">↓</button>
         </div>
-        <input type="text" value="${escapeHtml(h.name)}" onblur="renameHabit('${h.id}', this.value.trim())" />
+
+        <input type="text" value="${escapeHtml(h.name)}"
+               onblur="renameHabit('${h.id}', this.value.trim())" />
+
         <select onchange="changeTag('${h.id}', this.value)">
           <option ${h.tag==='AM'?'selected':''}>AM</option>
           <option ${h.tag==='PM'?'selected':''}>PM</option>
           <option value="Any" ${h.tag==='Any'?'selected':''}>Cualquiera</option>
         </select>
-        <input type="number" min="1" step="1" value="${h.goal||1}" style="max-width:100px" title="Objetivo diario" onblur="setGoal('${h.id}', this.value)" />
+
+        <input type="number" min="1" step="1" value="${h.goal||1}"
+               style="max-width:100px" title="Objetivo diario"
+               onblur="setGoal('${h.id}', this.value)" />
+
         <div class="spacer"></div>
-        <div class="dow">${DOW.map((lab,idx)=>`<button type="button" aria-pressed="${(h.days||[]).includes(idx)}" onclick="toggleDay('${h.id}',${idx})">${lab}</button>`).join('')}</div>
+
+        <div class="dow">
+          ${DOW.map((lab,idx)=>`<button type="button" aria-pressed="${(h.days||[]).includes(idx)}"
+             onclick="toggleDay('${h.id}',${idx})">${lab}</button>`).join('')}
+        </div>
+
         <div class="spacer"></div>
-        <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">${h.archived?'Desarchivar':'Archivar'}</button>
-        <button class="btn danger" onclick="deleteHabit('${h.id}')">Eliminar</button>
+
+        <div class="actions">
+          <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">
+            ${h.archived?'Desarchivar':'Archivar'}
+          </button>
+          <button class="btn danger" onclick="deleteHabit('${h.id}')">Eliminar</button>
+        </div>
       </div>`;
     }
     function renderHabits(){
@@ -825,7 +859,7 @@
     function renderAll(){ renderToday(); renderHabits(); renderStats(); }
 
     // ===== Seguridad mínima
-    function escapeHtml(str){ return str.replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s])); }
+    function escapeHtml(str){ return str.replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&gt;","">":"&quot;"}[s])); }
 
     // ===== iOS: altura real --vh y toast consciente del teclado
     (function iosVhFix(){
