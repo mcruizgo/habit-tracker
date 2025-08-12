@@ -40,7 +40,6 @@
       overscroll-behavior-y: contain;
       overflow-x: hidden;
     }
-    /* Si el navegador soporta estas unidades, las usamos (el último bloque que aplique gana) */
     @supports (height: 100svh) { body { min-height: 100svh; } }
     @supports (height: 100dvh) { body { min-height: 100dvh; } }
 
@@ -61,10 +60,10 @@
     .row{display:flex;align-items:center;gap:12px}
     .chip{font-size:12px;color:#0b1225;background:var(--brand);padding:2px 8px;border-radius:999px}
     .muted{color:var(--muted)}
-    .spacer{flex:1}
+    .spacer{flex:1; min-width:0}
     .btn{background:var(--brand);color:#081226;border:0;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
     .btn.secondary{background:#0b1225;color:var(--text);border:1px solid var(--border)}
-    .btn.danger{background:#ef4444;color:white}
+    .btn.danger{background:var(--bad);color:white}
     .btn.ghost{background:transparent;border:1px dashed var(--border);color:var(--muted)}
     input[type="text"], input[type="number"], input[type="password"], select, textarea{width:100%;background:#0b1225;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
     .list{display:flex;flex-direction:column;gap:10px}
@@ -79,7 +78,7 @@
     .tag-PM{color:#3a0a2a;background:#f9a8d4}
     .tag-Any{color:#07361b;background:#86efac}
     .dow{display:flex; gap:6px; flex-wrap:wrap}
-    .dow button{border:1px solid var(--border); background:#0b1225; color:#e5e7eb; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px}
+    .dow button{border:1px solid var(--border); background:#0b1225; color:#e5e7eb; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px; white-space:nowrap}
     .dow button[aria-pressed="true"]{background:#14324d; outline:1px solid var(--brand)}
     .pill{font-size:12px; border:1px solid var(--border); border-radius:999px; padding:2px 8px}
     .drag{cursor:grab; user-select:none}
@@ -114,34 +113,24 @@
     .item > input[type="text"]{ flex: 1 1 220px; min-width: 160px; }
     .item > select{ flex: 0 0 92px; }
     .item > input[type="number"]{ flex: 0 0 90px; }
-    
-    /* Muy importante: que los "spacer" no empujen fuera en pantallas estrechas */
-    .spacer{ flex: 1 0 0; min-width: 0; }
-    
-    .dow{ display:flex; gap:6px; flex-wrap:wrap; flex: 1 1 240px; min-width: 0; }
-    .dow button{ white-space: nowrap; }
-    
     .actions{ display:flex; gap:8px; margin-left:auto; flex: 0 0 auto; flex-wrap:wrap; }
-    
+    .dow{ flex: 1 1 240px; min-width:0; }
+    .btn{ flex-shrink:0; }
     @media (max-width: 430px){
-      /* Fuerza que los días ocupen la línea completa y se repartan en varias filas */
-      .dow{ flex-basis: 100%; }
-      /* Acciones a la línea siguiente y pegadas a la derecha */
-      .actions{ flex-basis: 100%; justify-content: flex-end; margin-top: 8px; }
-      /* Botones un poco más compactos para que no sangren */
+      .dow{ flex-basis:100%; }
+      .actions{ flex-basis:100%; justify-content:flex-end; margin-top:8px; }
       .actions .btn{ padding:8px 10px; }
       .dow button{ padding:4px 6px; font-size:11px; }
     }
+
     /* --- Fix layout HOY (iPhone/estrecho) --- */
     .today-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; width:100%; }
     .today-row .controls{ flex:0 0 auto; }
-    .today-row .titlecol{ flex:1 1 240px; min-width:0; }   /* texto flexible sin empujar fuera */
+    .today-row .titlecol{ flex:1 1 240px; min-width:0; }
     .today-row .heat{ flex:1 1 100%; display:grid; grid-template-columns:repeat(7,16px); gap:5px; justify-content:flex-end; }
-    
-    /* compacta un poco en pantallas estrechas */
     @media (max-width: 430px){
       .today-row .heat{ grid-template-columns:repeat(7,14px); gap:4px; }
-      .today-row .controls .btn{ padding:8px 10px; }  /* +/- más compactos */
+      .today-row .controls .btn{ padding:8px 10px; }
     }
   </style>
 </head>
@@ -390,12 +379,12 @@
     async function loadState(){ try{ const fromIDB = await idbGet('state'); if(fromIDB) return migrate(fromIDB); const raw = localStorage.getItem('habitDataV1'); if(raw) return migrate(JSON.parse(raw)); return defaultState(); }catch(e){ const raw=localStorage.getItem('habitDataV1'); return raw?migrate(JSON.parse(raw)):defaultState(); } }
     async function saveState(){ try{ state.lastOpen=todayStr(); await idbSet('state', state); }catch{} try{ localStorage.setItem('habitDataV1', JSON.stringify(state)); }catch{} broadcastState(); }
 
-    // ===== Multitab
+    // ===== Multitab (mismo dispositivo)
     const channel = ('BroadcastChannel' in self) ? new BroadcastChannel('hr-sync') : null;
     function broadcastState(){ if(channel) channel.postMessage({type:'state', state}); }
     if(channel){ channel.onmessage = (e)=>{ if(e.data && e.data.type==='state'){ state = migrate(e.data.state); renderAll(); } }; }
 
-    // ===== Persistencia (reduce purgados)
+    // ===== Persistencia (reduce purgados del navegador)
     async function requestPersistence(){
       if(!('storage' in navigator) || !navigator.storage.persist) return;
       try{
@@ -477,10 +466,10 @@
       const list=state.order.map(id=>state.habits.find(h=>h.id===id)).filter(Boolean).filter(h=>isActiveToday(h) && (filterDaypart==='AM' ? (h.tag==='AM'||h.tag==='Any') : (h.tag==='PM'||h.tag==='Any')));
       if(list.length===0){ wrap.innerHTML = `<div class="muted">No hay hábitos para este tramo. Ajusta días/objetivos en <strong>Hábitos</strong>.</div>`; return; }
       for(const h of list){
+        const done=isDoneOn(h.id,todayStr()); const count=getCount(h.id); const need=h.goal||1; const li=document.createElement('div'); li.className='item';
         const controls = (need>1)
           ? `<div class="controls row"><button class="btn secondary" onclick="dec('${h.id}')">−</button><div>${count}/${need}</div><button class="btn" onclick="inc('${h.id}')">+</button></div>`
           : `<div class="controls"><input type="checkbox" ${done?'checked':''} onclick="toggleDone('${h.id}')" /></div>`;
-        
         li.innerHTML = `
           <div class="today-row">
             ${controls}
@@ -511,25 +500,25 @@
           <button class="btn secondary" onclick="moveUp('${h.id}')">↑</button>
           <button class="btn secondary" onclick="moveDown('${h.id}')">↓</button>
         </div>
-    
+
         <input type="text" value="${escapeHtml(h.name)}"
                onblur="renameHabit('${h.id}', this.value.trim())" />
-    
+
         <select onchange="changeTag('${h.id}', this.value)">
           <option ${h.tag==='AM'?'selected':''}>AM</option>
           <option ${h.tag==='PM'?'selected':''}>PM</option>
           <option value="Any" ${h.tag==='Any'?'selected':''}>Cualquiera</option>
         </select>
-    
+
         <input type="number" min="1" step="1" value="${h.goal||1}"
                style="max-width:100px" title="Objetivo diario"
                onblur="setGoal('${h.id}', this.value)" />
-    
+
         <div class="dow">
           ${DOW.map((lab,idx)=>`<button type="button" aria-pressed="${(h.days||[]).includes(idx)}"
              onclick="toggleDay('${h.id}',${idx})">${lab}</button>`).join('')}
         </div>
-    
+
         <div class="actions">
           <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">
             ${h.archived?'Desarchivar':'Archivar'}
@@ -554,7 +543,7 @@
         const streak=computeStreak(h.id); const adh=adherence(h.id,30);
         row.innerHTML = `
           <div>
-            <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">Obj ${h.goal||1}/día</span></div>
+            <div><strong>${escapeHtml(h.name)}</strong> <span class="chip tag-${h.tag}">${h.tag}</span> <span class="pill">Obj ${h.goal||1}/día</span></div>
             <div class="small muted">Adherencia 30 días: <strong>${adh}%</strong> • Racha: <strong>${streak}</strong></div>
           </div>
           <div class="spacer"></div>
@@ -639,7 +628,7 @@
           for(const d in sc.dates){ tc.dates[d] = Math.max(parseInt(tc.dates[d]||0), parseInt(sc.dates[d]||0)); }
         } else {
           const newId = 'h'+Math.random().toString(36).slice(2,9);
-          result.habits.push({id:newId, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:h.archived||false});
+          result.habits.push({id:newId, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:false});
           result.order.push(newId);
           const sc = inc.completions[h.id]||{dates:{}};
           result.completions[newId] = {dates:{...sc.dates}};
@@ -919,6 +908,22 @@
           .catch(err => console.warn('SW error', err));
       });
     }
+
+    // ===== Exportar funciones al scope global (para onclick)
+    window.APP_VERSION = 'build-2025-08-12-hr2';
+    console.log('Habit Tracker versión:', window.APP_VERSION);
+    document.documentElement.setAttribute('data-js','ok');
+    Object.assign(window, {
+      showTab, toggleDaypartFilter, addHabitFromUI, quickAdd,
+      inc, dec, toggleDone,
+      moveUp, moveDown,
+      archiveHabit, deleteHabit,
+      enablePin, disablePin, tryUnlock, showHint, confirmNuke,
+      doExport, copyExport, downloadExport, shareExport,
+      importFromFile, doImport,
+      downloadEncrypted, shareEncrypted, importEncrypted,
+      undoAction
+    });
   </script>
 </body>
 </html>
