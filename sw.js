@@ -1,5 +1,5 @@
 // sw.js — Habit & Routine Tracker (cache-first + navigation fallback)
-const CACHE = 'hr-cache-v6';
+const CACHE = 'hr-cache-v7';
 const ASSETS = [
   './',
   'index.html',
