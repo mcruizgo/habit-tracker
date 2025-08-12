@@ -2,16 +2,42 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Habit & Routine Tracker — PRO (PWA + IndexedDB)</title>
-  <meta name="theme-color" content="#60a5fa" />
+  <title>Habit & Routine Tracker — PRO (PWA + IndexedDB + PIN)</title>
+
+  <!-- PWA & metas -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="theme-color" content="#60a5fa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- Iconos -->
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/icon-512.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon-180.png">
+
+  <!-- Social -->
+  <meta property="og:title" content="Habit & Routine Tracker">
+  <meta property="og:description" content="Seguimiento de hábitos simple, offline y privado. PWA + IndexedDB + PIN + backups.">
+  <meta property="og:image" content="assets/og-image.png">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+
   <style>
     :root{ --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --brand:#60a5fa; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --card:#0b1225; --border:#1f2937; --shadow:0 10px 30px rgba(0,0,0,.35); --radius:14px }
-    html,body{height:100%}
-    body{margin:0; font:16px system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial; color:var(--text); background:linear-gradient(180deg,#0b1225,#0f172a 30%,#0b1225)}
-    .container{max-width:1024px;margin:0 auto;padding:24px}
+
+    html,body{height:100%; min-height:100dvh; min-height:-webkit-fill-available}
+    body{
+      margin:0; font:16px system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial;
+      color:var(--text);
+      background:linear-gradient(180deg,#0b1225,#0f172a 30%,#0b1225);
+      padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+      -webkit-text-size-adjust:100%; touch-action:manipulation
+    }
+    *{-webkit-tap-highlight-color:transparent}
+
+    .container{max-width:1024px;margin:0 auto;padding:24px; padding-left:calc(24px + env(safe-area-inset-left)); padding-right:calc(24px + env(safe-area-inset-right))}
     header{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
     .title{font-size:20px;font-weight:700;letter-spacing:.2px}
     .subtitle{color:var(--muted);font-size:14px}
@@ -37,22 +63,24 @@
     .item .streak{font-size:12px;color:var(--muted)}
     .heat{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
     .sq{width:18px;height:18px;border-radius:4px;background:#0d1b33;border:1px solid var(--border)}
-    .sq.on{background:var(--ok)}
+    .sq.on{background:#22c55e}
     .small{font-size:12px}
     .footer{margin-top:24px;color:var(--muted);font-size:12px}
     .tag-AM{color:#08344a;background:#7dd3fc}
     .tag-PM{color:#3a0a2a;background:#f9a8d4}
     .tag-Any{color:#07361b;background:#86efac}
     .dow{display:flex; gap:6px; flex-wrap:wrap}
-    .dow button{border:1px solid var(--border); background:#0b1225; color:var(--text); padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px}
+    .dow button{border:1px solid var(--border); background:#0b1225; color:#e5e7eb; padding:6px 8px; border-radius:8px; cursor:pointer; font-size:12px}
     .dow button[aria-pressed="true"]{background:#14324d; outline:1px solid var(--brand)}
     .pill{font-size:12px; border:1px solid var(--border); border-radius:999px; padding:2px 8px}
     .drag{cursor:grab; user-select:none}
     .archived{opacity:.6; filter:saturate(.6)}
+
     /* Toast */
-    .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#0b1225;border:1px solid var(--border);box-shadow:var(--shadow);padding:10px 14px;border-radius:10px;display:none;gap:8px;align-items:center;z-index:9999}
+    .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#0b1225;border:1px solid var(--border);box-shadow:var(--shadow);padding:10px 14px;border-radius:10px;display:none;gap:8px;align-items:center;z-index:9999}
     .toast.show{display:flex}
-    /* Monthly heat calendar */
+
+    /* Month heat calendar */
     .month{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
     .cell{height:20px;border-radius:4px;border:1px solid var(--border);background:#0d1b33}
     .lvl1{background:#214d2b}
@@ -60,6 +88,17 @@
     .lvl3{background:#22c55e}
     .legend{display:flex;gap:8px;align-items:center}
     .legend .box{width:16px;height:16px;border-radius:4px;border:1px solid var(--border);}
+
+    /* iOS reorder fallback */
+    .reorder{display:none}
+    body.touch .reorder{display:flex; gap:6px}
+    .reorder .btn{padding:6px 8px}
+
+    /* Lock overlay */
+    #lock{position:fixed;inset:0;background:rgba(5,10,22,.75);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:99999}
+    #lock .panel{width:min(420px,92vw);background:#0b1225;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+    #lock h3{margin:0 0 6px 0}
+    #lock .hint{color:var(--muted);font-size:12px}
   </style>
 </head>
 <body>
@@ -70,12 +109,11 @@
         <div class="subtitle" id="greeting">Buenos días</div>
       </div>
       <nav class="tabs" role="tablist" aria-label="Secciones">
-        <button class="tab-btn" role="tab" id="tab-today" aria-selected="true" onclick="showTab('today')" data-i18n="tab_today">Hoy</button>
-        <button class="tab-btn" role="tab" id="tab-habits" aria-selected="false" onclick="showTab('habits')" data-i18n="tab_habits">Hábitos</button>
-        <button class="tab-btn" role="tab" id="tab-stats" aria-selected="false" onclick="showTab('stats')" data-i18n="tab_stats">Estadísticas</button>
-        <button class="tab-btn" role="tab" id="tab-review" aria-selected="false" onclick="showTab('review')" data-i18n="tab_review">Revisión</button>
-        <button class="tab-btn" role="tab" id="tab-backup" aria-selected="false" onclick="showTab('backup')" data-i18n="tab_backup">Copia/Restaurar</button>
-        <button class="tab-btn secondary" onclick="toggleLang()" id="langBtn">EN</button>
+        <button class="tab-btn" role="tab" id="tab-today" aria-selected="true" onclick="showTab('today')">Hoy</button>
+        <button class="tab-btn" role="tab" id="tab-habits" aria-selected="false" onclick="showTab('habits')">Hábitos</button>
+        <button class="tab-btn" role="tab" id="tab-stats" aria-selected="false" onclick="showTab('stats')">Estadísticas</button>
+        <button class="tab-btn" role="tab" id="tab-review" aria-selected="false" onclick="showTab('review')">Revisión</button>
+        <button class="tab-btn" role="tab" id="tab-backup" aria-selected="false" onclick="showTab('backup')">Copia/Restaurar</button>
       </nav>
     </header>
 
@@ -86,41 +124,41 @@
           <div class="row" style="margin-bottom:10px">
             <div class="chip" id="daypart">AM</div>
             <div class="muted" id="today-date"></div>
-            <span class="pill" id="persist-note" hidden>⚠️ <span data-i18n="persist_note">Añade a Inicio para más estabilidad</span></span>
+            <span class="pill" id="persist-note" hidden>⚠️ Añade a Inicio para más estabilidad</span>
             <div class="spacer"></div>
-            <button class="btn secondary" onclick="toggleDaypartFilter()" title="Alternar filtro AM/PM" data-i18n="btn_switch">Cambiar AM/PM</button>
+            <button class="btn secondary" onclick="toggleDaypartFilter()" title="Alternar filtro AM/PM">Cambiar AM/PM</button>
           </div>
           <div class="list" id="today-list"></div>
-          <div class="footer" data-i18n="today_tip">Si el hábito tiene objetivo &gt; 1, usa +/−. La racha sube cuando alcanzas el objetivo del día.</div>
+          <div class="footer">Si el hábito tiene objetivo &gt; 1, usa +/−. La racha sube cuando alcanzas el objetivo del día.</div>
         </div>
       </section>
 
       <!-- HÁBITOS -->
       <section id="panel-habits" class="card" hidden>
         <div class="p">
-          <h3 style="margin-top:0" data-i18n="habits_title">Tus hábitos</h3>
+          <h3 style="margin-top:0">Tus hábitos</h3>
           <div class="list" id="habit-list"></div>
           <hr style="border-color:var(--border); margin:16px 0"/>
           <div class="grid">
             <div class="half card" style="background:transparent; border:0; box-shadow:none">
               <div class="p">
-                <h4 style="margin-top:0" data-i18n="add_habit">Añadir hábito</h4>
+                <h4 style="margin-top:0">Añadir hábito</h4>
                 <div class="row" style="gap:10px; align-items:flex-start; flex-wrap:wrap">
                   <input id="new-name" type="text" placeholder="Ej.: Té verde" />
                   <select id="new-tag" style="max-width:140px">
                     <option value="AM">AM</option>
                     <option value="PM">PM</option>
-                    <option value="Any" data-i18n="any">Cualquiera</option>
+                    <option value="Any">Cualquiera</option>
                   </select>
                   <input id="new-goal" type="number" value="1" min="1" step="1" style="max-width:120px" title="Objetivo diario (veces)" />
-                  <button class="btn" onclick="addHabitFromUI()" data-i18n="btn_add">Añadir</button>
+                  <button class="btn" onclick="addHabitFromUI()">Añadir</button>
                 </div>
-                <div class="small muted" style="margin-top:6px" data-i18n="days_hint">Puedes ajustar los días activos (L–D) después.</div>
+                <div class="small muted" style="margin-top:6px">Puedes ajustar los días activos (L–D) después.</div>
               </div>
             </div>
             <div class="half card" style="background:transparent; border:0; box-shadow:none">
               <div class="p">
-                <h4 style="margin-top:0" data-i18n="suggestions">Sugerencias</h4>
+                <h4 style="margin-top:0">Sugerencias</h4>
                 <div class="row" style="flex-wrap:wrap; gap:8px">
                   <button class="tab-btn" onclick="quickAdd('Té verde','AM')">Té verde</button>
                   <button class="tab-btn" onclick="quickAdd('Caminata 30 min','AM')">Caminata 30′</button>
@@ -131,20 +169,19 @@
               </div>
             </div>
           </div>
-          <div class="footer small"><span data-i18n="archive_hint">Puedes archivar hábitos para ocultarlos sin perder el histórico.</span></div>
         </div>
       </section>
 
       <!-- ESTADÍSTICAS -->
       <section id="panel-stats" class="card" hidden>
         <div class="p">
-          <h3 style="margin-top:0" data-i18n="stats_title">Estadísticas</h3>
+          <h3 style="margin-top:0">Estadísticas</h3>
           <div id="stats-wrap" class="list"></div>
           <hr style="border-color:var(--border); margin:12px 0"/>
-          <h4 data-i18n="month_title">Este mes</h4>
+          <h4>Este mes</h4>
           <div class="month" id="month-heat"></div>
           <div class="legend small" style="margin-top:8px">
-            <span class="muted" data-i18n="legend_label">Adherencia por día:</span>
+            <span class="muted">Adherencia por día:</span>
             <span class="box"></span>
             <span class="box lvl1"></span>
             <span class="box lvl2"></span>
@@ -156,26 +193,26 @@
       <!-- REVISIÓN SEMANAL -->
       <section id="panel-review" class="card" hidden>
         <div class="p">
-          <h3 style="margin-top:0" data-i18n="review_title">Revisión semanal</h3>
+          <h3 style="margin-top:0">Revisión semanal</h3>
           <div class="small muted" id="week-label"></div>
           <div class="grid" style="margin-top:8px">
             <div class="half">
               <div class="card"><div class="p">
-                <label class="small" data-i18n="rev_good">Qué funcionó</label>
+                <label class="small">Qué funcionó</label>
                 <textarea id="rev-good" rows="3"></textarea>
-                <label class="small" data-i18n="rev_adjust">Qué ajusto</label>
+                <label class="small">Qué ajusto</label>
                 <textarea id="rev-adj" rows="3"></textarea>
-                <label class="small" data-i18n="rev_win">Un win</label>
+                <label class="small">Un win</label>
                 <textarea id="rev-win" rows="2"></textarea>
                 <div class="row" style="margin-top:8px">
-                  <button class="btn" onclick="saveReview()" data-i18n="btn_save">Guardar</button>
-                  <button class="btn secondary" onclick="clearReviewForm()" data-i18n="btn_clear">Limpiar</button>
+                  <button class="btn" onclick="saveReview()">Guardar</button>
+                  <button class="btn secondary" onclick="clearReviewForm()">Limpiar</button>
                 </div>
               </div></div>
             </div>
             <div class="half">
               <div class="card"><div class="p">
-                <h4 style="margin-top:0" data-i18n="rev_history">Historial</h4>
+                <h4 style="margin-top:0">Historial</h4>
                 <div id="rev-list" class="list"></div>
               </div></div>
             </div>
@@ -183,43 +220,80 @@
         </div>
       </section>
 
-      <!-- BACKUP -->
+      <!-- BACKUP + PRIVACIDAD -->
       <section id="panel-backup" class="card" hidden>
         <div class="p">
-          <h3 style="margin-top:0" data-i18n="backup_title">Copia de seguridad / Restaurar</h3>
+          <h3 style="margin-top:0">Copia de seguridad / Restaurar</h3>
           <div class="grid">
             <div class="half">
               <div class="card"><div class="p">
-                <p class="muted small" data-i18n="export_hint">Exporta tus datos (copia/pega, descarga o comparte).</p>
+                <p class="muted small">Exporta tus datos (copia/pega, descarga o comparte).</p>
                 <textarea id="export-box" rows="8" readonly></textarea>
                 <div class="row" style="margin-top:8px; flex-wrap:wrap">
-                  <button class="btn" onclick="doExport()" data-i18n="btn_gen">Generar exportación</button>
-                  <button class="btn secondary" onclick="copyExport()" data-i18n="btn_copy">Copiar</button>
-                  <button class="btn" onclick="downloadExport()" data-i18n="btn_download">Descargar backup.json</button>
-                  <button class="btn" onclick="shareExport()" data-i18n="btn_share">Compartir…</button>
+                  <button class="btn" onclick="doExport()">Generar exportación</button>
+                  <button class="btn secondary" onclick="copyExport()">Copiar</button>
+                  <button class="btn" onclick="downloadExport()">Descargar backup.json</button>
+                  <button class="btn" onclick="shareExport()">Compartir…</button>
                 </div>
                 <hr style="border-color:var(--border); margin:12px 0"/>
-                <h4 style="margin:0" data-i18n="enc_title">Backup cifrado (AES‑GCM)</h4>
+                <h4 style="margin:0">Backup cifrado (AES-GCM)</h4>
                 <input id="enc-pass" type="password" placeholder="Contraseña" />
                 <div class="row" style="margin-top:8px; flex-wrap:wrap">
-                  <button class="btn" onclick="downloadEncrypted()" data-i18n="btn_enc_download">Descargar .hrz</button>
-                  <button class="btn secondary" onclick="shareEncrypted()" data-i18n="btn_enc_share">Compartir .hrz</button>
+                  <button class="btn" onclick="downloadEncrypted()">Descargar .hrz</button>
+                  <button class="btn secondary" onclick="shareEncrypted()">Compartir .hrz</button>
                 </div>
               </div></div>
             </div>
             <div class="half">
               <div class="card"><div class="p">
-                <p class="muted small" data-i18n="import_hint">Restaurar desde archivo o pegando JSON. Puedes <strong>fusionar</strong> o <strong>reemplazar</strong>.</p>
+                <p class="muted small">Restaurar desde archivo o pegando JSON. Puedes <strong>fusionar</strong> o <strong>reemplazar</strong>.</p>
                 <div class="row" style="flex-wrap:wrap">
                   <input id="import-file" type="file" accept="application/json,.hrz" />
-                  <label class="small"><input type="checkbox" id="merge-toggle" /> <span data-i18n="merge_label">Fusionar (merge) en lugar de reemplazar</span></label>
+                  <label class="small"><input type="checkbox" id="merge-toggle" /> Fusionar (merge) en lugar de reemplazar</label>
                 </div>
                 <textarea id="import-box" rows="6" placeholder="Pega aquí tu JSON…"></textarea>
                 <div class="row" style="margin-top:8px; flex-wrap:wrap">
-                  <button class="btn" onclick="importFromFile()" data-i18n="btn_import_file">Importar archivo</button>
-                  <button class="btn danger" onclick="doImport()" data-i18n="btn_import_paste">Restaurar (pegar JSON)</button>
-                  <button class="btn secondary" onclick="importEncrypted()" data-i18n="btn_import_enc">Importar .hrz</button>
+                  <button class="btn" onclick="importFromFile()">Importar archivo</button>
+                  <button class="btn danger" onclick="doImport()">Restaurar (pegar JSON)</button>
+                  <button class="btn secondary" onclick="importEncrypted()">Importar .hrz</button>
                 </div>
+              </div></div>
+            </div>
+          </div>
+
+          <hr style="border-color:var(--border); margin:16px 0"/>
+          <h3 style="margin:0">Privacidad / Seguridad</h3>
+          <p class="small muted">Tus datos viven sólo en este dispositivo. Puedes bloquear la app con un <strong>PIN</strong> local (4–8 dígitos). Si lo olvidas, sólo podrás recuperar con tu backup.</p>
+          <div class="grid">
+            <div class="half">
+              <div class="card"><div class="p">
+                <h4 style="margin-top:0">PIN de apertura</h4>
+                <input id="pin-1" inputmode="numeric" pattern="[0-9]*" type="password" placeholder="PIN (4–8 dígitos)" maxlength="8" />
+                <input id="pin-2" inputmode="numeric" pattern="[0-9]*" type="password" placeholder="Repite el PIN" maxlength="8" style="margin-top:8px" />
+                <input id="pin-hint" type="text" placeholder="Pista (opcional)" style="margin-top:8px" />
+                <div class="row" style="margin-top:8px; flex-wrap:wrap">
+                  <button class="btn" onclick="enablePin()">Activar/Actualizar PIN</button>
+                  <button class="btn secondary" onclick="disablePin()">Quitar PIN</button>
+                </div>
+                <div class="row" style="margin-top:8px; flex-wrap:wrap">
+                  <label class="small">Auto-bloqueo: </label>
+                  <select id="autolock" style="max-width:180px" onchange="setAutoLock(this.value)">
+                    <option value="0">Nunca</option>
+                    <option value="5">5 min</option>
+                    <option value="10" selected>10 min</option>
+                    <option value="30">30 min</option>
+                  </select>
+                </div>
+              </div></div>
+            </div>
+            <div class="half">
+              <div class="card"><div class="p">
+                <h4 style="margin-top:0">Avisos</h4>
+                <ul class="small">
+                  <li>Instala la app (PWA) para reducir purgados de datos.</li>
+                  <li>Haz backups regulares (mejor cifrados con contraseña).</li>
+                  <li>Si olvidas el PIN, puedes <strong>borrar datos</strong> desde la pantalla de bloqueo y restaurar desde backup.</li>
+                </ul>
               </div></div>
             </div>
           </div>
@@ -228,46 +302,37 @@
     </main>
 
     <div class="footer" style="text-align:center; margin-top:24px">
-      <span data-i18n="footer_text">Local-first con IndexedDB (persistencia) y copia en localStorage. PWA instalable y offline en HTTPS/localhost.</span>
+      Local-first con <strong>IndexedDB</strong> (persistencia) y copia en <code>localStorage</code>. PWA instalable y offline en <strong>HTTPS</strong> o <code>localhost</code>.
     </div>
   </div>
 
-  <div class="toast" id="toast"><span id="toast-msg">Hecho</span> <button class="btn secondary" onclick="undoAction()" data-i18n="btn_undo">Deshacer</button></div>
+  <div class="toast" id="toast"><span id="toast-msg">Hecho</span> <button class="btn secondary" onclick="undoAction()">Deshacer</button></div>
+
+  <!-- Lock overlay -->
+  <div id="lock">
+    <div class="panel">
+      <h3>🔒 Desbloquear</h3>
+      <div class="small muted">Introduce tu PIN para abrir la app.</div>
+      <input id="lock-pin" inputmode="numeric" pattern="[0-9]*" type="password" placeholder="PIN" maxlength="8" style="margin-top:8px"/>
+      <div class="row" style="margin-top:8px; flex-wrap:wrap">
+        <button class="btn" onclick="tryUnlock()">Desbloquear</button>
+        <button class="btn secondary" onclick="showHint()">Ver pista</button>
+        <button class="btn danger" onclick="confirmNuke()">Borrar datos…</button>
+      </div>
+      <div id="lock-msg" class="hint" style="margin-top:8px"></div>
+    </div>
+  </div>
 
   <script>
-    // ===== i18n =====
-    const DICT = {
-      es: {
-        tab_today:'Hoy', tab_habits:'Hábitos', tab_stats:'Estadísticas', tab_review:'Revisión', tab_backup:'Copia/Restaurar',
-        persist_note:'Añade a Inicio para más estabilidad', btn_switch:'Cambiar AM/PM', today_tip:'Si el hábito tiene objetivo > 1, usa +/−. La racha sube cuando alcanzas el objetivo del día.',
-        habits_title:'Tus hábitos', add_habit:'Añadir hábito', any:'Cualquiera', btn_add:'Añadir', days_hint:'Puedes ajustar los días activos (L–D) después.', suggestions:'Sugerencias', archive_hint:'Puedes archivar hábitos para ocultarlos sin perder el histórico.',
-        stats_title:'Estadísticas', month_title:'Este mes', legend_label:'Adherencia por día:',
-        review_title:'Revisión semanal', rev_good:'Qué funcionó', rev_adjust:'Qué ajusto', rev_win:'Un win', btn_save:'Guardar', btn_clear:'Limpiar', rev_history:'Historial',
-        backup_title:'Copia de seguridad / Restaurar', export_hint:'Exporta tus datos (copia/pega, descarga o comparte).', btn_gen:'Generar exportación', btn_copy:'Copiar', btn_download:'Descargar backup.json', btn_share:'Compartir…', enc_title:'Backup cifrado (AES‑GCM)', btn_enc_download:'Descargar .hrz', btn_enc_share:'Compartir .hrz', import_hint:'Restaurar desde archivo o pegando JSON. Puedes fusionar o reemplazar.', merge_label:'Fusionar (merge) en lugar de reemplazar', btn_import_file:'Importar archivo', btn_import_paste:'Restaurar (pegar JSON)', btn_import_enc:'Importar .hrz', footer_text:'Local-first con IndexedDB (persistencia) y copia en localStorage. PWA instalable y offline en HTTPS/localhost.', btn_undo:'Deshacer'
-      },
-      en: {
-        tab_today:'Today', tab_habits:'Habits', tab_stats:'Stats', tab_review:'Review', tab_backup:'Backup/Restore',
-        persist_note:'Add to Home for better stability', btn_switch:'Switch AM/PM', today_tip:'If a habit has goal > 1, use +/−. Streak increases when you reach the daily goal.',
-        habits_title:'Your habits', add_habit:'Add habit', any:'Any', btn_add:'Add', days_hint:'You can adjust active days (Mon–Sun) afterwards.', suggestions:'Suggestions', archive_hint:'You can archive habits to hide them without losing history.',
-        stats_title:'Statistics', month_title:'This month', legend_label:'Daily adherence:',
-        review_title:'Weekly Review', rev_good:'What worked', rev_adjust:'What to adjust', rev_win:'One win', btn_save:'Save', btn_clear:'Clear', rev_history:'History',
-        backup_title:'Backup / Restore', export_hint:'Export your data (copy/paste, download or share).', btn_gen:'Generate export', btn_copy:'Copy', btn_download:'Download backup.json', btn_share:'Share…', enc_title:'Encrypted backup (AES‑GCM)', btn_enc_download:'Download .hrz', btn_enc_share:'Share .hrz', import_hint:'Restore from file or paste JSON. You can merge or replace.', merge_label:'Merge instead of replace', btn_import_file:'Import file', btn_import_paste:'Restore (paste JSON)', btn_import_enc:'Import .hrz', footer_text:'Local‑first with IndexedDB (persistence) and localStorage backup. PWA installable + offline on HTTPS/localhost.', btn_undo:'Undo'
-      }
-    };
-    function t(key){ const lang = state?.lang || 'es'; return (DICT[lang] && DICT[lang][key]) || key; }
-    function applyI18n(){ document.querySelectorAll('[data-i18n]').forEach(el=>{ el.innerHTML = t(el.getAttribute('data-i18n')); }); document.getElementById('langBtn').textContent = (state.lang==='es'?'EN':'ES'); }
-    function toggleLang(){ state.lang = (state.lang==='es'?'en':'es'); saveState(); applyI18n(); }
-
-    // ===== Utilidades de fecha =====
+    // ===== Utilidades
     const pad = n => (n<10? '0'+n : ''+n);
     function todayStr(){ const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
     function dateOffsetStr(days){ const d = new Date(); d.setDate(d.getDate()+days); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-    function humanDate(){ return new Date().toLocaleDateString(state?.lang==='en'?'en-GB':'es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
-    function todayDow(){ return new Date().getDay(); } // 0=Dom
-    function mondayOfWeek(d){ const dt = new Date(d); const day = dt.getDay(); const diff = (day+6)%7; dt.setDate(dt.getDate()-diff); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+    function humanDate(){ return new Date().toLocaleDateString('es-ES',{weekday:'long',year:'numeric',month:'long',day:'numeric'}); }
+    function todayDow(){ return new Date().getDay(); }
 
-    // ===== IndexedDB + localStorage backup =====
-    const DB_NAME = 'habitDBv3';
+    // ===== IndexedDB + localStorage
+    const DB_NAME = 'habitDBv5';
     const STORE = 'kv';
     let state = null;
 
@@ -275,68 +340,100 @@
     async function idbGet(key){ const db = await openDB(); return new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,'readonly'); const st=tx.objectStore(STORE); const rq=st.get(key); rq.onsuccess=()=>resolve(rq.result?rq.result.value:undefined); rq.onerror=()=>reject(rq.error); }); }
     async function idbSet(key,value){ const db = await openDB(); return new Promise((resolve,reject)=>{ const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE); st.put({key,value}); tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error); }); }
 
-    function defaultState(){ return {lang:'es', habits:[], completions:{}, createdAt: todayStr(), lastOpen: todayStr(), reviews:[], order:[], archived:[], notifications:{enabled:true,lastPing:0}}; }
-    function migrate(old){ const s = JSON.parse(JSON.stringify(old||defaultState())); s.lang = s.lang||'es'; s.habits = Array.isArray(s.habits)? s.habits : []; s.completions = s.completions && typeof s.completions==='object'? s.completions : {}; s.reviews = Array.isArray(s.reviews)? s.reviews : []; s.order = Array.isArray(s.order)? s.order : s.habits.map(h=>h.id); s.archived = Array.isArray(s.archived)? s.archived : []; for(const h of s.habits){ if(!('tag' in h)) h.tag='Any'; if(!Array.isArray(h.days)) h.days=[]; if(typeof h.goal !== 'number' || h.goal < 1) h.goal = 1; if(typeof h.archived!=='boolean') h.archived=false; } for(const id in s.completions){ const obj=s.completions[id]||{dates:{}}; if(!obj.dates) obj.dates={}; for(const d in obj.dates){ if(obj.dates[d]===true) obj.dates[d]=1; if(obj.dates[d]===false) delete obj.dates[d]; } } return s; }
+    function defaultState(){ return {lang:'es', habits:[], completions:{}, createdAt: todayStr(), lastOpen: todayStr(), reviews:[], order:[], archived:[], notifications:{enabled:true,lastPing:0}, security:{autoLockMins:10} }; }
+    function migrate(old){ const s = JSON.parse(JSON.stringify(old||defaultState())); s.lang = s.lang||'es'; s.habits = Array.isArray(s.habits)? s.habits : []; s.completions = s.completions && typeof s.completions==='object'? s.completions : {}; s.reviews = Array.isArray(s.reviews)? s.reviews : []; s.order = Array.isArray(s.order)? s.order : s.habits.map(h=>h.id); s.archived = Array.isArray(s.archived)? s.archived : []; s.notifications = s.notifications||{enabled:true,lastPing:0}; s.security = s.security||{autoLockMins:10}; for(const h of s.habits){ if(!('tag' in h)) h.tag='Any'; if(!Array.isArray(h.days)) h.days=[]; if(typeof h.goal !== 'number' || h.goal < 1) h.goal = 1; if(typeof h.archived!=='boolean') h.archived=false; } for(const id in s.completions){ const obj=s.completions[id]||{dates:{}}; if(!obj.dates) obj.dates={}; for(const d in obj.dates){ if(obj.dates[d]===true) obj.dates[d]=1; if(obj.dates[d]===false) delete obj.dates[d]; } } return s; }
 
     async function loadState(){ try{ const fromIDB = await idbGet('state'); if(fromIDB) return migrate(fromIDB); const raw = localStorage.getItem('habitDataV1'); if(raw) return migrate(JSON.parse(raw)); return defaultState(); }catch(e){ const raw=localStorage.getItem('habitDataV1'); return raw?migrate(JSON.parse(raw)):defaultState(); } }
     async function saveState(){ try{ state.lastOpen=todayStr(); await idbSet('state', state); }catch{} try{ localStorage.setItem('habitDataV1', JSON.stringify(state)); }catch{} broadcastState(); }
 
-    // ===== Broadcast (multitab) =====
+    // ===== Multitab
     const channel = ('BroadcastChannel' in self) ? new BroadcastChannel('hr-sync') : null;
     function broadcastState(){ if(channel) channel.postMessage({type:'state', state}); }
     if(channel){ channel.onmessage = (e)=>{ if(e.data && e.data.type==='state'){ state = migrate(e.data.state); renderAll(); } }; }
 
-    // ===== Persistence request =====
-    async function requestPersistence(){ if(!('storage' in navigator) || !navigator.storage.persist) return; try{ const persisted = await navigator.storage.persisted(); if(!persisted){ const ok = await navigator.storage.persist(); if(!ok){ document.getElementById('persist-note').hidden=false; } } }catch{} }
+    // ===== Persistencia (reduce purgados)
+    async function requestPersistence(){
+      if(!('storage' in navigator) || !navigator.storage.persist) return;
+      try{
+        const persisted = await navigator.storage.persisted();
+        if(!persisted){
+          const ok = await navigator.storage.persist();
+          if(!ok){ document.getElementById('persist-note').hidden=false; }
+        }
+      }catch{}
+    }
 
-    // ===== Hábitos =====
+    // ===== Hábitos CRUD
     function addHabit(name, tag, goal=1){ if(!name) return; const id='h'+Math.random().toString(36).slice(2,9); const h={id,name,tag,days:[],goal:Math.max(1,parseInt(goal)||1),archived:false}; state.habits.push(h); state.order.push(id); state.completions[id]={dates:{}}; saveState(); renderAll(); }
     function quickAdd(name, tag){ addHabit(name, tag, 1); showTab('habits'); }
     function addHabitFromUI(){ const name=document.getElementById('new-name').value.trim(); const tag=document.getElementById('new-tag').value; const goal=parseInt(document.getElementById('new-goal').value)||1; addHabit(name,tag,goal); document.getElementById('new-name').value=''; document.getElementById('new-goal').value='1'; }
-    function deleteHabit(id){ if(!confirm(state.lang==='es'? '¿Eliminar este hábito? Se perderá su historial.' : 'Delete this habit? History will be lost.')) return; state.habits=state.habits.filter(h=>h.id!==id); state.order=state.order.filter(x=>x!==id); delete state.completions[id]; saveState(); renderAll(); }
+    function deleteHabit(id){ if(!confirm('¿Eliminar este hábito? Se perderá su historial.')) return; state.habits=state.habits.filter(h=>h.id!==id); state.order=state.order.filter(x=>x!==id); delete state.completions[id]; saveState(); renderAll(); }
     function renameHabit(id, newName){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.name=newName; saveState(); renderAll(); }
     function changeTag(id, newTag){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.tag=newTag; saveState(); renderAll(); }
     function toggleDay(id, dow){ const h=state.habits.find(h=>h.id===id); if(!h) return; const idx=(h.days||[]).indexOf(dow); if(idx>=0) h.days.splice(idx,1); else h.days.push(dow); h.days.sort(); saveState(); renderAll(); }
     function setGoal(id, goal){ const h=state.habits.find(h=>h.id===id); if(!h) return; const g=Math.max(1, parseInt(goal)||1); h.goal=g; saveState(); renderAll(); }
     function archiveHabit(id, arch){ const h=state.habits.find(h=>h.id===id); if(!h) return; h.archived=arch; saveState(); renderAll(); }
 
-    // ===== Drag & drop reorder =====
+    // ===== Drag & drop + fallback ↑↓
     let dragId=null;
     function onDragStart(e,id){ dragId=id; e.dataTransfer.effectAllowed='move'; }
     function onDragOver(e,id){ e.preventDefault(); const a=state.order.indexOf(dragId), b=state.order.indexOf(id); if(a===-1||b===-1||a===b) return; state.order.splice(b,0,state.order.splice(a,1)[0]); renderHabits(); }
     function onDragEnd(){ saveState(); dragId=null; }
+    function moveUp(id){ const i = state.order.indexOf(id); if(i>0){ state.order.splice(i-1,0,state.order.splice(i,1)[0]); saveState(); renderHabits(); } }
+    function moveDown(id){ const i = state.order.indexOf(id); if(i>=0 && i<state.order.length-1){ state.order.splice(i+1,0,state.order.splice(i,1)[0]); saveState(); renderHabits(); } }
 
-    // ===== Completar con UNDO =====
-    let undo = null; // {id, date, prev}
+    // ===== Contadores y UNDO
+    let toastTimer=null, toastUndo=null;
+    function showToast(msg, undoFn){ const t=document.getElementById('toast'); document.getElementById('toast-msg').textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastUndo = undoFn || null; toastTimer = setTimeout(()=>{ t.classList.remove('show'); toastUndo=null; }, 5000); }
+    function undoAction(){ if(toastUndo){ toastUndo(); } document.getElementById('toast').classList.remove('show'); toastUndo=null; }
+
     function getCount(id, date=todayStr()){ const comp=state.completions[id]||{dates:{}}; return parseInt(comp.dates[date]||0); }
-    function setCount(id, count, date=todayStr()){ if(!state.completions[id]) state.completions[id]={dates:{}}; const prev = getCount(id,date); if(count<=0) delete state.completions[id].dates[date]; else state.completions[id].dates[date]=count; saveState(); renderAll(); showToast(state.lang==='es'?'Cambios guardados':'Saved', ()=>{ setCount(id, prev, date); }); }
+    function setCount(id, count, date=todayStr()){ if(!state.completions[id]) state.completions[id]={dates:{}}; const prev = getCount(id,date); if(count<=0) delete state.completions[id].dates[date]; else state.completions[id].dates[date]=count; saveState(); renderAll(); showToast('Guardado', ()=>{ setCount(id, prev, date); }); }
     function inc(id){ const h=state.habits.find(h=>h.id===id); if(!h) return; setCount(id, Math.min(getCount(id)+1, h.goal)); }
     function dec(id){ setCount(id, Math.max(getCount(id)-1, 0)); }
     function toggleDone(id){ const h=state.habits.find(h=>h.id===id); if(!h) return; const done = getCount(id)>=h.goal; setCount(id, done?0:h.goal); }
 
-    // ===== Rachas / últimas semanas / adherencia =====
+    // ===== Rachas / adherencia / mes
     function isDoneOn(id, date){ const h=state.habits.find(h=>h.id===id); if(!h) return false; const cnt=parseInt((state.completions[id]||{dates:{}}).dates[date]||0); return cnt >= h.goal; }
     function computeStreak(id){ let streak=0; for(let i=0;i<3650;i++){ const ds=dateOffsetStr(-i); if(isDoneOn(id, ds)) streak++; else break; } return streak; }
     function last7(id){ const arr=[]; for(let i=6;i>=0;i--){ const ds=dateOffsetStr(-i); arr.push(isDoneOn(id, ds)); } return arr; }
-    function adherence(id, days=30){ let ok=0, total=0; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const h=state.habits.find(h=>h.id===id); if(!h) continue; if(h.archived) continue; if(h.days.length && !h.days.includes(new Date(Date.parse(ds)).getDay())) continue; total++; if(isDoneOn(id, ds)) ok++; } return total? Math.round(ok*100/total):0; }
-    function adherenceByPart(days=30){ let amT=0, amOk=0, pmT=0, pmOk=0; for(const h of state.habits){ if(h.archived) continue; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const day = new Date(Date.parse(ds)).getDay(); if(h.days.length && !h.days.includes(day)) continue; if(h.tag==='PM'){ pmT++; if(isDoneOn(h.id, ds)) pmOk++; } else if(h.tag==='AM'){ amT++; if(isDoneOn(h.id, ds)) amOk++; } else { // Any cuenta en ambas
-          amT++; pmT++; if(isDoneOn(h.id, ds)){ amOk++; pmOk++; }
-        }
-      } }
-      return {am: amT?Math.round(amOk*100/amT):0, pm: pmT?Math.round(pmOk*100/pmT):0}; }
+    function adherence(id, days=30){ let ok=0, total=0; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const h=state.habits.find(h=>h.id===id); if(!h || h.archived) continue; const dow = new Date(Date.parse(ds)).getDay(); if(h.days.length && !h.days.includes(dow)) continue; total++; if(isDoneOn(h.id, ds)) ok++; } return total? Math.round(ok*100/total):0; }
+    function adherenceByPart(days=30){ let amT=0, amOk=0, pmT=0, pmOk=0; for(const h of state.habits){ if(h.archived) continue; for(let i=0;i<days;i++){ const ds=dateOffsetStr(-i); const dow = new Date(Date.parse(ds)).getDay(); if(h.days.length && !h.days.includes(dow)) continue; if(h.tag==='PM'){ pmT++; if(isDoneOn(h.id, ds)) pmOk++; } else if(h.tag==='AM'){ amT++; if(isDoneOn(h.id, ds)) amOk++; } else { amT++; pmT++; if(isDoneOn(h.id, ds)){ amOk++; pmOk++; } } } } return {am: amT?Math.round(amOk*100/amT):0, pm: pmT?Math.round(pmOk*100/pmT):0}; }
 
-    // ===== Render =====
-    function showTab(name){ for(const p of ['today','habits','stats','review','backup']){ const panel=document.getElementById('panel-'+p); const btn=document.getElementById('tab-'+p); const selected=(p===name); if(panel) panel.hidden=!selected; if(btn) btn.setAttribute('aria-selected', selected); } if(name==='backup') doExport(); if(name==='stats') renderMonthHeat(); if(name==='review') renderReview(); }
+    // ===== Render
+    function showTab(name){
+      for(const p of ['today','habits','stats','review','backup']){
+        const panel=document.getElementById('panel-'+p);
+        const btn=document.getElementById('tab-'+p);
+        const selected=(p===name);
+        if(panel) panel.hidden=!selected;
+        if(btn) btn.setAttribute('aria-selected', selected);
+      }
+      if(name==='backup') doExport();
+      if(name==='stats') renderMonthHeat();
+      if(name==='review') renderReview();
+    }
     function currentDaypart(){ const h=new Date().getHours(); return (h < 14) ? 'AM' : 'PM'; }
     let filterDaypart=currentDaypart();
     function toggleDaypartFilter(){ filterDaypart=(filterDaypart==='AM'?'PM':'AM'); renderToday(); }
-    function renderGreeting(){ const hour=new Date().getHours(); const g=document.getElementById('greeting'); const dateEl=document.getElementById('today-date'); dateEl.textContent=humanDate(); g.textContent = state.lang==='es' ? (hour<12?'Buenos días':(hour<20?'Buenas tardes':'Buenas noches')) : (hour<12?'Good morning':(hour<20?'Good afternoon':'Good evening')); const chip=document.getElementById('daypart'); chip.textContent=filterDaypart; chip.className='chip tag-'+filterDaypart; }
+    function renderGreeting(){
+      const hour=new Date().getHours();
+      const g=document.getElementById('greeting');
+      const dateEl=document.getElementById('today-date');
+      dateEl.textContent=humanDate();
+      g.textContent = (hour<12?'Buenos días':(hour<20?'Buenas tardes':'Buenas noches'));
+      const chip=document.getElementById('daypart');
+      chip.textContent=filterDaypart;
+      chip.className='chip tag-'+filterDaypart;
+    }
     function isActiveToday(h){ if(h.archived) return false; if(!h.days || h.days.length===0) return true; return h.days.includes(todayDow()); }
+
     function renderToday(){
       renderGreeting(); const wrap=document.getElementById('today-list'); wrap.innerHTML='';
       const list=state.order.map(id=>state.habits.find(h=>h.id===id)).filter(Boolean).filter(h=>isActiveToday(h) && (filterDaypart==='AM' ? (h.tag==='AM'||h.tag==='Any') : (h.tag==='PM'||h.tag==='Any')));
-      if(list.length===0){ wrap.innerHTML = `<div class="muted">${state.lang==='es'?'No hay hábitos para este tramo. Ajusta días/objetivos en ':'No habits for this part. Adjust days/goals in '}<strong>${t('tab_habits')}</strong>.</div>`; return; }
-      for(const h of list){ const done=isDoneOn(h.id,todayStr()); const count=getCount(h.id); const need=h.goal||1; const li=document.createElement('div'); li.className='item';
+      if(list.length===0){ wrap.innerHTML = `<div class="muted">No hay hábitos para este tramo. Ajusta días/objetivos en <strong>Hábitos</strong>.</div>`; return; }
+      for(const h of list){
+        const done=isDoneOn(h.id,todayStr()); const count=getCount(h.id); const need=h.goal||1; const li=document.createElement('div'); li.className='item';
         const controls = (need>1)
           ? `<div class="row"><button class="btn secondary" onclick="dec('${h.id}')">−</button><div>${count}/${need}</div><button class="btn" onclick="inc('${h.id}')">+</button></div>`
           : `<input type="checkbox" ${done?'checked':''} onclick="toggleDone('${h.id}')" />`;
@@ -344,8 +441,8 @@
           <label style="gap:12px">
             ${controls}
             <div>
-              <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">${state.lang==='es'?'Objetivo':'Goal'}: ${need}</span></div>
-              <div class="streak">${state.lang==='es'?'Racha':'Streak'}: <strong>${computeStreak(h.id)}</strong> ${state.lang==='es'?'día(s)':'day(s)'} </div>
+              <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">Objetivo: ${need}</span></div>
+              <div class="streak">Racha: <strong>${computeStreak(h.id)}</strong> día(s)</div>
             </div>
           </label>
           <div class="spacer"></div>
@@ -354,69 +451,125 @@
       }
     }
 
-    const DOW_LABELS_ES = ['D','L','M','X','J','V','S'];
-    const DOW_LABELS_EN = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-    function dowButtons(h){ const LAB = state.lang==='es'? DOW_LABELS_ES : DOW_LABELS_EN; return `<div class=\"dow\">${LAB.map((lab,idx)=>`<button type=\"button\" aria-pressed=\"${(h.days||[]).includes(idx)}\" onclick=\"toggleDay('${h.id}',${idx})\">${lab}</button>`).join('')}</div>`; }
-
-    function habitRow(h){ const archClass = h.archived?'archived':''; return `
+    function habitRow(h){
+      const DOW=['D','L','M','X','J','V','S']; const archClass = h.archived?'archived':'';
+      return `
       <div class="item ${archClass}" draggable="true" ondragstart="onDragStart(event,'${h.id}')" ondragover="onDragOver(event,'${h.id}')" ondragend="onDragEnd()">
         <div class="drag" title="Drag">⠿</div>
+        <div class="reorder">
+          <button class="btn secondary" onclick="moveUp('${h.id}')">↑</button>
+          <button class="btn secondary" onclick="moveDown('${h.id}')">↓</button>
+        </div>
         <input type="text" value="${escapeHtml(h.name)}" onblur="renameHabit('${h.id}', this.value.trim())" />
         <select onchange="changeTag('${h.id}', this.value)">
           <option ${h.tag==='AM'?'selected':''}>AM</option>
           <option ${h.tag==='PM'?'selected':''}>PM</option>
-          <option value="Any" ${h.tag==='Any'?'selected':''}>${t('any')}</option>
+          <option value="Any" ${h.tag==='Any'?'selected':''}>Cualquiera</option>
         </select>
-        <input type="number" min="1" step="1" value="${h.goal||1}" style="max-width:100px" title="${state.lang==='es'?'Objetivo diario':'Daily goal'}" onblur="setGoal('${h.id}', this.value)" />
+        <input type="number" min="1" step="1" value="${h.goal||1}" style="max-width:100px" title="Objetivo diario" onblur="setGoal('${h.id}', this.value)" />
         <div class="spacer"></div>
-        ${dowButtons(h)}
+        <div class="dow">${DOW.map((lab,idx)=>`<button type="button" aria-pressed="${(h.days||[]).includes(idx)}" onclick="toggleDay('${h.id}',${idx})">${lab}</button>`).join('')}</div>
         <div class="spacer"></div>
-        <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">${h.archived?(state.lang==='es'?'Desarchivar':'Unarchive'):(state.lang==='es'?'Archivar':'Archive')}</button>
-        <button class="btn danger" onclick="deleteHabit('${h.id}')">${state.lang==='es'?'Eliminar':'Delete'}</button>
-      </div>`; }
-
-    function renderHabits(){ const wrap=document.getElementById('habit-list'); wrap.innerHTML=''; if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">${state.lang==='es'?'Aún no tienes hábitos. Usa Sugerencias o añade el tuyo.':'No habits yet. Use Suggestions or add yours.'}</div>`; return; }
+        <button class="btn secondary" onclick="archiveHabit('${h.id}', ${!h.archived})">${h.archived?'Desarchivar':'Archivar'}</button>
+        <button class="btn danger" onclick="deleteHabit('${h.id}')">Eliminar</button>
+      </div>`;
+    }
+    function renderHabits(){
+      const wrap=document.getElementById('habit-list'); wrap.innerHTML='';
+      if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">Aún no tienes hábitos. Usa Sugerencias o añade el tuyo.</div>`; return; }
       for(const id of state.order){ const h = state.habits.find(h=>h.id===id); if(!h) continue; wrap.insertAdjacentHTML('beforeend', habitRow(h)); }
     }
 
-    function renderStats(){ const wrap=document.getElementById('stats-wrap'); wrap.innerHTML=''; if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">${state.lang==='es'?'Nada que mostrar todavía.':'Nothing to show yet.'}</div>`; return; }
+    function renderStats(){
+      const wrap=document.getElementById('stats-wrap'); wrap.innerHTML='';
+      if(state.habits.length===0){ wrap.innerHTML = `<div class="muted">Nada que mostrar todavía.</div>`; return; }
       const byPart = adherenceByPart(30);
-      for(const h of state.habits){ if(h.archived) continue; const row=document.createElement('div'); row.className='item'; const streak=computeStreak(h.id); const adh=adherence(h.id,30);
+      for(const h of state.habits){
+        if(h.archived) continue;
+        const row=document.createElement('div'); row.className='item';
+        const streak=computeStreak(h.id); const adh=adherence(h.id,30);
         row.innerHTML = `
           <div>
-            <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">${state.lang==='es'?'Obj':'Goal'} ${h.goal||1}/día</span></div>
-            <div class="small muted">${state.lang==='es'?'Adherencia 30 días':'30‑day adherence'}: <strong>${adh}%</strong> • ${state.lang==='es'?'Racha':'Streak'}: <strong>${streak}</strong></div>
+            <div><strong>${escapeHtml(h.name)}</strong> <span class=\"chip tag-${h.tag}\">${h.tag}</span> <span class="pill">Obj ${h.goal||1}/día</span></div>
+            <div class="small muted">Adherencia 30 días: <strong>${adh}%</strong> • Racha: <strong>${streak}</strong></div>
           </div>
           <div class="spacer"></div>
           <div class="heat">${last7(h.id).map(v=>`<div class="sq ${v?'on':''}"></div>`).join('')}</div>`;
         wrap.appendChild(row);
       }
-      const summary = document.createElement('div'); summary.className='small muted'; summary.style.marginTop='6px'; summary.textContent = `${state.lang==='es'?'Adherencia AM':'AM adherence'}: ${byPart.am}% • ${state.lang==='es'?'Adherencia PM':'PM adherence'}: ${byPart.pm}%`;
+      const summary = document.createElement('div'); summary.className='small muted'; summary.style.marginTop='6px';
+      summary.textContent = `Adherencia AM: ${byPart.am}% • Adherencia PM: ${byPart.pm}%`;
       wrap.appendChild(summary);
     }
 
-    function renderMonthHeat(){ const cont = document.getElementById('month-heat'); cont.innerHTML=''; const now = new Date(); const y=now.getFullYear(), m=now.getMonth(); const first = new Date(y,m,1); const last = new Date(y,m+1,0); const startDow = first.getDay(); const days = last.getDate(); const cells=[]; for(let i=0;i<startDow;i++) cells.push(null); for(let d=1; d<=days; d++){ const date=`${y}-${pad(m+1)}-${pad(d)}`; let active=0, done=0; for(const h of state.habits){ if(h.archived) continue; const dow = new Date(y,m,d).getDay(); if(h.days.length && !h.days.includes(dow)) continue; active++; if(isDoneOn(h.id, date)) done++; } const ratio = active? (done/active) : 0; let cls='cell'; if(ratio>0 && ratio<=0.33) cls+=' lvl1'; else if(ratio<=0.66) cls+=' lvl2'; else if(ratio>0.66) cls+=' lvl3'; cells.push({cls, date}); }
-      for(const c of cells){ const div=document.createElement('div'); if(!c){ div.className='cell'; cont.appendChild(div); continue; } div.className=c.cls; div.title=c.date; cont.appendChild(div); }
+    function renderMonthHeat(){
+      const cont = document.getElementById('month-heat'); cont.innerHTML='';
+      const now = new Date(); const y=now.getFullYear(), m=now.getMonth();
+      const first = new Date(y,m,1); const last = new Date(y,m+1,0);
+      const startDow = first.getDay(); const days = last.getDate(); const cells=[];
+      for(let i=0;i<startDow;i++) cells.push(null);
+      for(let d=1; d<=days; d++){
+        const date=`${y}-${pad(m+1)}-${pad(d)}`;
+        let active=0, done=0;
+        for(const h of state.habits){
+          if(h.archived) continue;
+          const dow = new Date(y,m,d).getDay();
+          if(h.days.length && !h.days.includes(dow)) continue;
+          active++; if(isDoneOn(h.id, date)) done++;
+        }
+        const ratio = active? (done/active) : 0;
+        let cls='cell';
+        if(ratio>0 && ratio<=0.33) cls+=' lvl1'; else if(ratio<=0.66) cls+=' lvl2'; else if(ratio>0.66) cls+=' lvl3';
+        cells.push({cls, date});
+      }
+      for(const c of cells){
+        const div=document.createElement('div');
+        if(!c){ div.className='cell'; cont.appendChild(div); continue; }
+        div.className=c.cls; div.title=c.date; cont.appendChild(div);
+      }
     }
 
-    function renderReview(){ const label=document.getElementById('week-label'); const monday=mondayOfWeek(new Date()); label.textContent = (state.lang==='es'?'Semana que empieza: ':'Week starting: ')+ monday; const list=document.getElementById('rev-list'); list.innerHTML=''; const items = state.reviews.slice().reverse(); if(items.length===0){ list.innerHTML = `<div class="muted small">${state.lang==='es'?'Sin revisiones aún.':'No reviews yet.'}</div>`; return; } for(const r of items){ const div=document.createElement('div'); div.className='item'; div.innerHTML = `<div><div><strong>${r.week}</strong></div><div class="small">✅ ${escapeHtml(r.good||'')}<br/>🔧 ${escapeHtml(r.adjust||'')}<br/>🏆 ${escapeHtml(r.win||'')}</div></div>`; list.appendChild(div); } }
+    function mondayOfWeek(d){ const dt = new Date(d); const day = dt.getDay(); const diff = (day+6)%7; dt.setDate(dt.getDate()-diff); return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`; }
+    function renderReview(){
+      const label=document.getElementById('week-label'); const monday=mondayOfWeek(new Date()); label.textContent = 'Semana que empieza: '+ monday;
+      const list=document.getElementById('rev-list'); list.innerHTML='';
+      const items = state.reviews.slice().reverse();
+      if(items.length===0){ list.innerHTML = `<div class="muted small">Sin revisiones aún.</div>`; return; }
+      for(const r of items){
+        const div=document.createElement('div'); div.className='item';
+        div.innerHTML = `<div><div><strong>${r.week}</strong></div><div class="small">✅ ${escapeHtml(r.good||'')}<br/>🔧 ${escapeHtml(r.adjust||'')}<br/>🏆 ${escapeHtml(r.win||'')}</div></div>`;
+        list.appendChild(div);
+      }
+    }
     function clearReviewForm(){ document.getElementById('rev-good').value=''; document.getElementById('rev-adj').value=''; document.getElementById('rev-win').value=''; }
-    function saveReview(){ const week=mondayOfWeek(new Date()); const good=document.getElementById('rev-good').value.trim(); const adjust=document.getElementById('rev-adj').value.trim(); const win=document.getElementById('rev-win').value.trim(); const idx = state.reviews.findIndex(r=>r.week===week); const entry={week, good, adjust, win}; if(idx>=0) state.reviews[idx]=entry; else state.reviews.push(entry); saveState(); clearReviewForm(); renderReview(); showToast(state.lang==='es'?'Revisión guardada':'Review saved'); }
+    function saveReview(){
+      const week=mondayOfWeek(new Date());
+      const good=document.getElementById('rev-good').value.trim();
+      const adjust=document.getElementById('rev-adj').value.trim();
+      const win=document.getElementById('rev-win').value.trim();
+      const idx = state.reviews.findIndex(r=>r.week===week);
+      const entry={week, good, adjust, win};
+      if(idx>=0) state.reviews[idx]=entry; else state.reviews.push(entry);
+      saveState(); clearReviewForm(); renderReview(); showToast('Revisión guardada');
+    }
 
-    // ===== Backup / Restore =====
+    // ===== Backup / Restore / Crypto
     function doExport(){ const box=document.getElementById('export-box'); box.value=JSON.stringify(state,null,2); }
     function copyExport(){ const box=document.getElementById('export-box'); box.select(); document.execCommand('copy'); }
     function downloadExport(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='habit-backup.json'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 1000); }
-    async function shareExport(){ if(navigator.share){ const file = new File([JSON.stringify(state,null,2)], 'habit-backup.json', {type:'application/json'}); try{ await navigator.share({ files:[file], title:'Habit Backup', text:'Backup JSON' }); }catch(e){} } else { alert(state.lang==='es'?'Tu navegador no soporta compartir.':'Sharing not supported.'); } }
+    async function shareExport(){ if(navigator.share){ const file = new File([JSON.stringify(state,null,2)], 'habit-backup.json', {type:'application/json'}); try{ await navigator.share({ files:[file], title:'Habit Backup', text:'Backup JSON' }); }catch(e){} } else { alert('Tu navegador no soporta compartir.'); } }
 
-    function validateImported(obj){ if(!obj || typeof obj!=='object') throw new Error(state.lang==='es'?'No es un objeto':'Not an object'); if(!Array.isArray(obj.habits)) throw new Error(state.lang==='es'?'Falta array de hábitos':'Missing habits array'); if(typeof obj.completions!=='object') throw new Error(state.lang==='es'?'Falta historial':'Missing history'); return migrate(obj); }
-
-    function mergeStates(base, incoming){ const result = migrate(base); const inc = migrate(incoming); // merge habits by name (case‑insensitive)
+    function validateImported(obj){ if(!obj || typeof obj!=='object') throw new Error('No es un objeto'); if(!Array.isArray(obj.habits)) throw new Error('Falta array de hábitos'); if(typeof obj.completions!=='object') throw new Error('Falta historial'); return migrate(obj); }
+    function mergeStates(base, incoming){
+      const result = migrate(base); const inc = migrate(incoming);
       const nameMap = new Map(result.habits.map(h=>[h.name.toLowerCase(), h.id]));
-      for(const h of inc.habits){ const key=h.name.toLowerCase(); if(nameMap.has(key)){ const id=nameMap.get(key); const target = result.habits.find(x=>x.id===id); // merge fields (prefer existing)
+      for(const h of inc.habits){
+        const key=h.name.toLowerCase();
+        if(nameMap.has(key)){
+          const id=nameMap.get(key);
+          const target = result.habits.find(x=>x.id===id);
           target.goal = Math.max(target.goal||1, h.goal||1);
           target.days = Array.from(new Set([...(target.days||[]), ...(h.days||[])])).sort();
-          // merge completions (max count per date)
           const tc = result.completions[id] = result.completions[id]||{dates:{}};
           const sc = inc.completions[h.id]||{dates:{}};
           for(const d in sc.dates){ tc.dates[d] = Math.max(parseInt(tc.dates[d]||0), parseInt(sc.dates[d]||0)); }
@@ -424,80 +577,251 @@
           const newId = 'h'+Math.random().toString(36).slice(2,9);
           result.habits.push({id:newId, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:h.archived||false});
           result.order.push(newId);
-          const sc = inc.completions[h.id]||{dates:{}}; result.completions[newId] = {dates:{...sc.dates}};
+          const sc = inc.completions[h.id]||{dates:{}};
+          result.completions[newId] = {dates:{...sc.dates}};
         }
       }
-      // merge reviews (by week)
       const weeks = new Set(result.reviews.map(r=>r.week));
       for(const r of inc.reviews){ if(!weeks.has(r.week)) result.reviews.push(r); }
       return result;
     }
 
-    function importFromFile(){ const f=document.getElementById('import-file').files[0]; if(!f) return alert(state.lang==='es'?'Elige un archivo':'Choose a file'); const r=new FileReader(); r.onload=()=>{ const merge=document.getElementById('merge-toggle').checked; try{ let obj; if(f.name.endsWith('.hrz')){ alert(state.lang==='es'?'Usa "Importar .hrz" con tu contraseña.':'Use "Import .hrz" with your password.'); return; } else { obj=validateImported(JSON.parse(r.result)); } state = merge? mergeStates(state, obj) : obj; saveState(); renderAll(); alert(state.lang==='es'?'Datos importados.':'Data imported.'); }catch(e){ alert((state.lang==='es'?'No se pudo importar: ':'Import error: ')+e.message); } }; r.readAsText(f); }
-    function doImport(){ const raw=document.getElementById('import-box').value.trim(); if(!raw) return alert(state.lang==='es'?'Pega el JSON a importar.':'Paste JSON to import.'); const merge=document.getElementById('merge-toggle').checked; if(!merge && !confirm(state.lang==='es'?'Esto reemplazará todos tus datos. ¿Continuar?':'This will replace all your data. Continue?')) return; try{ const obj=validateImported(JSON.parse(raw)); state = merge? mergeStates(state,obj) : obj; saveState(); renderAll(); alert(state.lang==='es'?'Datos restaurados.':'Data restored.'); }catch(e){ alert((state.lang==='es'?'No se pudo importar: ':'Import error: ')+e.message); } }
+    function importFromFile(){
+      const f=document.getElementById('import-file').files[0]; if(!f) return alert('Elige un archivo');
+      const r=new FileReader();
+      r.onload=()=>{
+        const merge=document.getElementById('merge-toggle').checked;
+        try{
+          let obj;
+          if(f.name.endsWith('.hrz')){ alert('Usa "Importar .hrz" con tu contraseña.'); return; }
+          else { obj=validateImported(JSON.parse(r.result)); }
+          state = merge? mergeStates(state, obj) : obj;
+          saveState(); renderAll(); alert('Datos importados.');
+        }catch(e){ alert('No se pudo importar: '+e.message); }
+      };
+      r.readAsText(f);
+    }
+    function doImport(){
+      const raw=document.getElementById('import-box').value.trim(); if(!raw) return alert('Pega el JSON a importar.');
+      const merge=document.getElementById('merge-toggle').checked;
+      if(!merge && !confirm('Esto reemplazará todos tus datos. ¿Continuar?')) return;
+      try{
+        const obj=validateImported(JSON.parse(raw));
+        state = merge? mergeStates(state,obj) : obj;
+        saveState(); renderAll(); alert('Datos restaurados.');
+      }catch(e){ alert('No se pudo importar: '+e.message); }
+    }
 
-    // ===== Crypto (AES-GCM) =====
     const textEnc = new TextEncoder(); const textDec = new TextDecoder();
-    async function deriveKey(pass, salt){ const baseKey = await crypto.subtle.importKey('raw', textEnc.encode(pass), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'}, baseKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']); }
+    async function deriveKey(pass, salt){
+      const baseKey = await crypto.subtle.importKey('raw', textEnc.encode(pass), 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:100000,hash:'SHA-256'}, baseKey, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+    }
     function b64a(buf){ return btoa(String.fromCharCode(...new Uint8Array(buf))); }
     function a64b(str){ const bin = atob(str); const arr = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return arr.buffer; }
-    async function encryptState(pass){ if(!pass) throw new Error(state.lang==='es'?'Falta contraseña':'Missing password'); const salt=crypto.getRandomValues(new Uint8Array(16)); const iv=crypto.getRandomValues(new Uint8Array(12)); const key=await deriveKey(pass, salt); const data=textEnc.encode(JSON.stringify(state)); const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, data); return JSON.stringify({alg:'AES-GCM', salt:b64a(salt), iv:b64a(iv), ct:b64a(ct)}); }
-    async function decryptState(pass, payload){ const obj = typeof payload==='string'? JSON.parse(payload) : payload; const salt=a64b(obj.salt); const iv=a64b(obj.iv); const key=await deriveKey(pass, new Uint8Array(salt)); const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(iv)}, key, a64b(obj.ct)); return JSON.parse(textDec.decode(pt)); }
-    async function downloadEncrypted(){ const pass=document.getElementById('enc-pass').value; try{ const enc=await encryptState(pass); const blob=new Blob([enc],{type:'application/octet-stream'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='habit-backup.hrz'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }catch(e){ alert((state.lang==='es'?'Error: ':'Error: ')+e.message); } }
-    async function shareEncrypted(){ if(!navigator.share) return alert(state.lang==='es'?'Compartir no soportado':'Sharing not supported'); const pass=document.getElementById('enc-pass').value; try{ const enc=await encryptState(pass); const file = new File([enc], 'habit-backup.hrz', {type:'application/octet-stream'}); await navigator.share({ files:[file], title:'Habit Encrypted Backup', text:'Encrypted .hrz' }); }catch(e){ if(e.name!=='AbortError') alert((state.lang==='es'?'Error: ':'Error: ')+e.message); } }
-    async function importEncrypted(){ const pass=prompt(state.lang==='es'?'Contraseña para desencriptar:':'Password to decrypt:'); if(!pass) return; const f=document.getElementById('import-file').files[0]; if(!f || !f.name.endsWith('.hrz')) return alert(state.lang==='es'?'Elige un archivo .hrz':'Choose a .hrz file'); const r=new FileReader(); r.onload=async()=>{ try{ const obj=JSON.parse(r.result); const dec=await decryptState(pass,obj); const merge=document.getElementById('merge-toggle').checked; state = merge? mergeStates(state,dec) : migrate(dec); saveState(); renderAll(); alert(state.lang==='es'?'Datos importados.':'Data imported.'); }catch(e){ alert((state.lang==='es'?'No se pudo descifrar: ':'Decrypt error: ')+e.message); } }; r.readAsText(f); }
-
-    // ===== Toast & soft notifications =====
-    let toastTimer=null, toastUndo=null;
-    function showToast(msg, undoFn){ const t=document.getElementById('toast'); document.getElementById('toast-msg').textContent=msg; t.classList.add('show'); clearTimeout(toastTimer); toastUndo = undoFn || null; toastTimer = setTimeout(()=>{ t.classList.remove('show'); toastUndo=null; }, 5000); }
-    function undoAction(){ if(toastUndo){ toastUndo(); } document.getElementById('toast').classList.remove('show'); toastUndo=null; }
-
-    function softPings(){ if(state.notifications && state.notifications.enabled){ const now = Date.now(); if(now - (state.notifications.lastPing||0) < 15*60*1000) return; const hr = new Date().getHours(); const amWindow = hr>=8 && hr<=12; const pmWindow = hr>=20 && hr<=22; if(amWindow || pmWindow){ // check pending
-          const pending = state.habits.some(h=>!h.archived && ((amWindow && (h.tag==='AM'||h.tag==='Any')) || (pmWindow && (h.tag==='PM'||h.tag==='Any'))) && isActiveToday(h) && !isDoneOn(h.id,todayStr()));
-          if(pending){ showToast(state.lang==='es'?'¿Marcamos algún hábito ahora?':'Time to tick a habit?'); state.notifications.lastPing = now; saveState(); }
-        }
-      }
+    async function encryptState(pass){
+      if(!pass) throw new Error('Falta contraseña');
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const iv=crypto.getRandomValues(new Uint8Array(12));
+      const key=await deriveKey(pass, salt);
+      const data=textEnc.encode(JSON.stringify(state));
+      const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv}, key, data);
+      return JSON.stringify({alg:'AES-GCM', salt:b64a(salt), iv:b64a(iv), ct:b64a(ct)});
     }
-    setInterval(softPings, 60*1000);
+    async function decryptState(pass, payload){
+      const obj = typeof payload==='string'? JSON.parse(payload) : payload;
+      const salt=a64b(obj.salt); const iv=a64b(obj.iv);
+      const key=await deriveKey(pass, new Uint8Array(salt));
+      const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(iv)}, key, a64b(obj.ct));
+      return JSON.parse(textDec.decode(pt));
+    }
+    async function downloadEncrypted(){
+      const pass=document.getElementById('enc-pass').value;
+      try{
+        const enc=await encryptState(pass);
+        const blob=new Blob([enc],{type:'application/octet-stream'});
+        const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='habit-backup.hrz'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+      }catch(e){ alert('Error: '+e.message); }
+    }
+    async function shareEncrypted(){
+      if(!navigator.share) return alert('Compartir no soportado');
+      const pass=document.getElementById('enc-pass').value;
+      try{
+        const enc=await encryptState(pass);
+        const file = new File([enc], 'habit-backup.hrz', {type:'application/octet-stream'});
+        await navigator.share({ files:[file], title:'Habit Encrypted Backup', text:'Encrypted .hrz' });
+      }catch(e){ if(e.name!=='AbortError') alert('Error: '+e.message); }
+    }
+    async function importEncrypted(){
+      const pass=prompt('Contraseña para desencriptar:'); if(!pass) return;
+      const f=document.getElementById('import-file').files[0];
+      if(!f || !f.name.endsWith('.hrz')) return alert('Elige un archivo .hrz');
+      const r=new FileReader();
+      r.onload=async()=>{
+        try{
+          const obj=JSON.parse(r.result); const dec=await decryptState(pass,obj);
+          const merge=document.getElementById('merge-toggle').checked;
+          state = merge? mergeStates(state,dec) : migrate(dec);
+          saveState(); renderAll(); alert('Datos importados.');
+        }catch(e){ alert('No se pudo descifrar: '+e.message); }
+      };
+      r.readAsText(f);
+    }
 
-    // ===== PWA manifest + SW =====
-    function makeIcon(size){ const c=document.createElement('canvas'); c.width=c.height=size; const x=c.getContext('2d'); const g=x.createLinearGradient(0,0,size,size); g.addColorStop(0,'#60a5fa'); g.addColorStop(1,'#22c55e'); x.fillStyle=g; x.fillRect(0,0,size,size); x.fillStyle='rgba(0,0,0,.15)'; x.beginPath(); x.arc(size*0.5,size*0.5,size*0.38,0,Math.PI*2); x.fill(); x.fillStyle='white'; x.font=`${Math.floor(size*0.3)}px system-ui,Arial`; x.textAlign='center'; x.textBaseline='middle'; x.fillText('HR', size/2, size/2); return c.toDataURL('image/png'); }
-    function attachManifestAndIcons(){ const i192 = makeIcon(192), i512 = makeIcon(512); const manifest={ name:'Habit & Routine Tracker', short_name:'HR Tracker', start_url:'.', display:'standalone', background_color:'#0f172a', theme_color:'#60a5fa', icons:[ {src:i192,sizes:'192x192',type:'image/png'}, {src:i512,sizes:'512x512',type:'image/png'} ] }; const mblob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}); const murl=URL.createObjectURL(mblob); const link=document.createElement('link'); link.rel='manifest'; link.href=murl; document.head.appendChild(link); const apl=document.createElement('link'); apl.rel='apple-touch-icon'; apl.href=i192; document.head.appendChild(apl); }
-    function registerSW(){ if(!('serviceWorker' in navigator)) return; const swCode=`
-        const CACHE='hr-cache-v3';
-        const SHELLS=[ './', 'index.html' ];
-        self.addEventListener('install', e=>{ e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELLS)).then(()=>self.skipWaiting())); });
-        self.addEventListener('activate', e=>{ e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))); self.clients.claim(); });
-        self.addEventListener('fetch', e=>{ const req=e.request; if(req.mode==='navigate'){ e.respondWith(fetch(req).catch(()=>caches.match('index.html').then(r=>r||caches.match('./')))); return; } if(req.method!=='GET') return; e.respondWith(caches.match(req).then(cached=> cached || fetch(req).then(res=>{ const copy=res.clone(); caches.open(CACHE).then(c=>c.put(req,copy)); return res; }).catch(()=>caches.match('./')))); });`;
-      const blob=new Blob([swCode],{type:'text/javascript'}); const url=URL.createObjectURL(blob); navigator.serviceWorker.register(url,{scope:'./'}).catch(()=>{}); }
+    // ===== PIN & Lock
+    async function pinBits(pin, salt){
+      const base = await crypto.subtle.importKey('raw', textEnc.encode(pin), 'PBKDF2', false, ['deriveBits']);
+      return crypto.subtle.deriveBits({name:'PBKDF2', salt, iterations:150000, hash:'SHA-256'}, base, 256);
+    }
+    function setAutoLock(mins){ mins=parseInt(mins)||0; state.security = state.security||{}; state.security.autoLockMins = mins; saveState(); }
+    async function enablePin(){
+      const p1=document.getElementById('pin-1').value.trim();
+      const p2=document.getElementById('pin-2').value.trim();
+      const hint=document.getElementById('pin-hint').value.trim();
+      if(!/^\d{4,8}$/.test(p1)) return alert('El PIN debe tener 4–8 dígitos.');
+      if(p1!==p2) return alert('Los PIN no coinciden.');
+      const salt=crypto.getRandomValues(new Uint8Array(16));
+      const bits=await pinBits(p1, salt);
+      state.security = state.security||{};
+      state.security.pin = { salt: b64a(salt), hash: b64a(bits), hint };
+      saveState(); alert('PIN activado/actualizado.');
+    }
+    function disablePin(){
+      if(!state.security || !state.security.pin) return alert('No hay PIN activo.');
+      if(!confirm('Quitar PIN de apertura?')) return;
+      delete state.security.pin; saveState(); alert('PIN desactivado.'); hideLock();
+    }
+    async function verifyPin(pin){
+      try{
+        const sec=state.security && state.security.pin; if(!sec) return true;
+        const salt = new Uint8Array(a64b(sec.salt)); const expected = b64a(await pinBits(pin, salt));
+        return expected === sec.hash;
+      }catch{ return false; }
+    }
+    function showHint(){ const sec=state.security && state.security.pin; const el=document.getElementById('lock-msg'); el.textContent = (sec && sec.hint) ? ('Pista: '+sec.hint) : 'No hay pista guardada.'; }
+    function showLock(msg){
+      const o=document.getElementById('lock');
+      document.getElementById('lock-pin').value='';
+      document.getElementById('lock-msg').textContent=msg||'';
+      o.style.display='flex';
+      setTimeout(()=>{ const inp=document.getElementById('lock-pin'); inp.focus({preventScroll:false}); if('scrollIntoView' in inp) inp.scrollIntoView({block:'center'}); },100);
+    }
+    function hideLock(){ const o=document.getElementById('lock'); o.style.display='none'; }
+    async function tryUnlock(){
+      const pin=document.getElementById('lock-pin').value.trim();
+      if(!/^\d{4,8}$/.test(pin)) { document.getElementById('lock-msg').textContent='PIN inválido'; return; }
+      const ok = await verifyPin(pin);
+      if(ok){ hideLock(); lastUnlockTs = Date.now(); }
+      else { document.getElementById('lock-msg').textContent='PIN incorrecto'; }
+    }
+    function confirmNuke(){ if(!confirm('Esto borrará todos los datos locales (hábitos e historial). ¿Continuar?')) return; nukeAllData(); }
+    async function nukeAllData(){
+      try{
+        indexedDB.deleteDatabase(DB_NAME);
+        localStorage.removeItem('habitDataV1');
+        if('caches' in window){
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(k=>k.startsWith('hr-cache-')).map(k=>caches.delete(k)));
+        }
+        location.reload();
+      }catch(e){ alert('No se pudo borrar: '+e.message); }
+    }
 
-    // ===== Inicialización =====
+    // Autolock al volver tras X minutos
+    let hiddenAt = 0, lastUnlockTs = 0;
+    document.addEventListener('visibilitychange', ()=>{
+      const mins = (state && state.security && state.security.autoLockMins) || 0;
+      if(document.hidden){ hiddenAt = Date.now(); }
+      else if(hiddenAt && mins>0){
+        const away = (Date.now()-hiddenAt)/60000;
+        if(away >= mins && state.security && state.security.pin){ showLock(); }
+        hiddenAt=0;
+      }
+    });
+
+    // Ajuste del overlay con teclado iOS
+    if(window.visualViewport){
+      const adjustLock = () => {
+        const o = document.getElementById('lock');
+        if(!o || o.style.display!=='flex') return;
+        const kb = Math.max(0, window.innerHeight - window.visualViewport.height);
+        o.style.paddingBottom = `calc(env(safe-area-inset-bottom) + ${kb}px)`;
+      };
+      visualViewport.addEventListener('resize', adjustLock);
+      visualViewport.addEventListener('scroll', adjustLock);
+    }
+
+    // ===== Init =====
     (async function init(){
       await requestPersistence();
       state = await loadState();
+
+      // Primer arranque: sugerencias por defecto
       if(!state.habits || state.habits.length===0){
         state = state || defaultState();
         const defaults = [
-          {name:'🥤 Agua al despertar', tag:'AM', goal:1, days:[]}, {name:'🍵 Té verde', tag:'AM', goal:1, days:[]}, {name:'🍳 Desayuno proteico', tag:'AM', goal:1, days:[]}, {name:'🥗 5 raciones fruta/verdura', tag:'Any', goal:5, days:[]}, {name:'🥜 Frutos secos (puñado)', tag:'Any', goal:1, days:[1,2,3,4,5]}, {name:'🕘 Cierre de cocina (≥3 h antes)', tag:'PM', goal:1, days:[]}, {name:'🌿 Infusión de hinojo', tag:'PM', goal:1, days:[]}, {name:'🚫 Sin alcohol (L–J)', tag:'PM', goal:1, days:[1,2,3,4]},
-          {name:'🚶‍♀️ Caminata 45′', tag:'AM', goal:1, days:[]}, {name:'🚶‍♀️ Caminata 30′', tag:'PM', goal:1, days:[]}, {name:'💪 Fuerza 20′', tag:'Any', goal:1, days:[1,3,5]}, {name:'🧘‍♀️ Movilidad 5′', tag:'AM', goal:1, days:[]}, {name:'🏋️‍♀️ Core 8′', tag:'Any', goal:1, days:[2,4,6]}, {name:'🎾 Pádel (semanal)', tag:'Any', goal:1, days:[6]},
-          {name:'🇬🇧 English 15', tag:'Any', goal:1, days:[]}, {name:'📚 Lectura técnica 15′', tag:'Any', goal:1, days:[1,2,3,4]}, {name:'🧩 Curso AEM/skills 20′', tag:'Any', goal:1, days:[2,4]}, {name:'⏱️ Pomodoro 25′ (focus)', tag:'Any', goal:1, days:[1,2,3,4,5]}, {name:'📝 Diario de aprendizaje (3 bullets)', tag:'PM', goal:1, days:[]},
-          {name:'🍽️ Reset cocina 5′', tag:'PM', goal:1, days:[]}, {name:'🛋️ Salón recogido 5′', tag:'PM', goal:1, days:[]}, {name:'🧴 Baño exprés 10′', tag:'Any', goal:1, days:[3,6]}, {name:'🧺 Lavadora (semanal)', tag:'Any', goal:1, days:[3]}, {name:'🧻 Toallas (semanal)', tag:'Any', goal:1, days:[6]}, {name:'🛏️ Sábanas (quincenal)', tag:'Any', goal:1, days:[0]}, {name:'🗑️ Basura/reciclaje', tag:'PM', goal:1, days:[1,3,5]}, {name:'🔚 Shutdown checklist', tag:'PM', goal:1, days:[]}
+          {name:'🥤 Agua al despertar', tag:'AM', goal:1, days:[]},
+          {name:'🍵 Té verde', tag:'AM', goal:1, days:[]},
+          {name:'🍳 Desayuno proteico', tag:'AM', goal:1, days:[]},
+          {name:'🥗 5 raciones fruta/verdura', tag:'Any', goal:5, days:[]},
+          {name:'🥜 Frutos secos (puñado)', tag:'Any', goal:1, days:[1,2,3,4,5]},
+          {name:'🕘 Cierre de cocina (≥3 h antes)', tag:'PM', goal:1, days:[]},
+          {name:'🌿 Infusión de hinojo', tag:'PM', goal:1, days:[]},
+          {name:'🚫 Sin alcohol (L–J)', tag:'PM', goal:1, days:[1,2,3,4]},
+
+          {name:'🚶‍♀️ Caminata 45′', tag:'AM', goal:1, days:[]},
+          {name:'🚶‍♀️ Caminata 30′', tag:'PM', goal:1, days:[]},
+          {name:'💪 Fuerza 20′', tag:'Any', goal:1, days:[1,3,5]},
+          {name:'🧘‍♀️ Movilidad 5′', tag:'AM', goal:1, days:[]},
+          {name:'🏋️‍♀️ Core 8′', tag:'Any', goal:1, days:[2,4,6]},
+          {name:'🎾 Pádel (semanal)', tag:'Any', goal:1, days:[6]},
+
+          {name:'🇬🇧 English 15', tag:'Any', goal:1, days:[]},
+          {name:'📚 Lectura técnica 15′', tag:'Any', goal:1, days:[1,2,3,4]},
+          {name:'🧩 Curso AEM/skills 20′', tag:'Any', goal:1, days:[2,4]},
+          {name:'⏱️ Pomodoro 25′ (focus)', tag:'Any', goal:1, days:[1,2,3,4,5]},
+          {name:'📝 Diario de aprendizaje (3 bullets)', tag:'PM', goal:1, days:[]},
+
+          {name:'🍽️ Reset cocina 5′', tag:'PM', goal:1, days:[]},
+          {name:'🛋️ Salón recogido 5′', tag:'PM', goal:1, days:[]},
+          {name:'🧴 Baño exprés 10′', tag:'Any', goal:1, days:[3,6]},
+          {name:'🧺 Lavadora (semanal)', tag:'Any', goal:1, days:[3]},
+          {name:'🧻 Toallas (semanal)', tag:'Any', goal:1, days:[6]},
+          {name:'🛏️ Sábanas (quincenal)', tag:'Any', goal:1, days:[0]},
+          {name:'🗑️ Basura/reciclaje', tag:'PM', goal:1, days:[1,3,5]},
+          {name:'🔚 Shutdown checklist', tag:'PM', goal:1, days:[]}
         ];
-        for(const h of defaults){ const id='h'+Math.random().toString(36).slice(2,9); state.habits.push({id, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:false}); state.order.push(id); state.completions[id]={dates:{}}; }
+        for(const h of defaults){
+          const id='h'+Math.random().toString(36).slice(2,9);
+          state.habits.push({id, name:h.name, tag:h.tag, days:h.days, goal:h.goal, archived:false});
+          state.order.push(id);
+          state.completions[id]={dates:{}};
+        }
         await saveState();
       }
+
       renderAll();
-      attachManifestAndIcons();
-      registerSW();
-      applyI18n();
-      // periodic soft notifications check immediately
-      softPings();
+
+      // Marcar dispositivo táctil para fallback de reordenación
+      document.body.classList.toggle('touch', matchMedia('(pointer: coarse)').matches);
+
+      // Bloquear al abrir si hay PIN
+      if(state.security && state.security.pin){ showLock(); }
     })();
 
     function renderAll(){ renderToday(); renderHabits(); renderStats(); }
 
-    // ===== Seguridad mínima =====
+    // ===== Seguridad mínima
     function escapeHtml(str){ return str.replace(/[&<>\"]/g, s=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[s])); }
+
+    // ===== Service Worker (sw.js)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js', {scope:'./'})
+          .then(r => console.log('SW registrado:', r.scope))
+          .catch(err => console.warn('SW error', err));
+      });
+    }
   </script>
 </body>
 </html>
