@@ -1,0 +1,34 @@
+# --- Sistema operativo ---
+.DS_Store
+Thumbs.db
+
+# --- Editores/IDE ---
+.vscode/
+.idea/
+
+# --- Logs temporales ---
+*.log
+npm-debug.log*
+
+# --- Construcciones temporales ---
+dist/
+build/
+tmp/
+.temp/
+.cache/
+*.map
+
+# --- Dependencias (si las hubiera) ---
+node_modules/
+
+# --- Archivos personales / sensibles ---
+habit-backup.json
+*.hrz
+*.enc
+*.key
+.env
+.env.*
+
+# --- Otros ---
+coverage/
+*.zip
