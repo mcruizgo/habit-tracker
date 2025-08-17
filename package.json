@@ -1,0 +1,16 @@
+{
+  "name": "habit-tracker",
+  "version": "1.0.0",
+  "description": "<p align=\"center\">   <img src=\"assets/readme-hero.png\" alt=\"Habit & Routine Tracker banner\" width=\"100%\" /> </p>",
+  "main": "sw.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^30.0.5"
+  }
+}
