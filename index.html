@@ -356,6 +356,7 @@
     </div>
   </div>
 
+  <script src="heat.js"></script>
   <script>
     // ===== Utilidades
     const pad = n => (n<10? '0'+n : ''+n);
@@ -571,8 +572,7 @@
           active++; if(isDoneOn(h.id, date)) done++;
         }
         const ratio = active? (done/active) : 0;
-        let cls='cell';
-        if(ratio>0 && ratio<=0.33) cls+=' lvl1'; else if(ratio<=0.66) cls+=' lvl2'; else if(ratio>0.66) cls+=' lvl3';
+        const cls = getHeatClass(ratio);
         cells.push({cls, date});
       }
       for(const c of cells){
